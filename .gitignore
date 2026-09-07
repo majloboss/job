@@ -1,0 +1,22 @@
+# konfiguracia s heslami
+api/config/db.php
+api/config/mail.php
+api/config/vapid.php
+api/config/openrouter.php
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Node
+node_modules/
+web/dist/
+
+# lokalne data a logy
+*.log
+scraper/raw/
+scraper/out/
