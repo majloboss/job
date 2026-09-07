@@ -21,7 +21,8 @@ function doc_extract_text(string $path, string $mime): array {
             default => throw new RuntimeException('Formát sa nedá previesť na text'),
         };
     } catch (Throwable $e) {
-        return [null, mb_substr($e->getMessage(), 0, 500)];
+        // substr, nie mb_substr: sprava moze sama obsahovat neplatne bajty
+        return [null, doc_do_utf8(substr($e->getMessage(), 0, 500))];
     }
 
     $text = doc_cleanup($text);
@@ -31,21 +32,46 @@ function doc_extract_text(string $path, string $mime): array {
     return [mb_substr($text, 0, 60000), null];
 }
 
+// Zabezpeci, ze retazec je platne UTF-8.
+//
+// Nazvy kodovani sa medzi buildmi PHP lisia (CP1250 / Windows-1250), a
+// neznamy nazov vyhodi vynimku — preto sa kazdy skusa zvlast a v pripade
+// neuspechu sa pokracuje dalsim. Ked nesadne ziadne, neplatne bajty sa
+// zahodia, aby sa text nestratil cely.
+function doc_do_utf8(string $s): string {
+    if ($s === '' || mb_check_encoding($s, 'UTF-8')) return $s;
+
+    foreach (['CP1250', 'Windows-1250', 'ISO-8859-2', 'CP1252', 'ISO-8859-1'] as $kod) {
+        try {
+            if (!in_array(strtolower($kod), array_map('strtolower', mb_list_encodings()), true)) {
+                continue;
+            }
+            $prevod = @mb_convert_encoding($s, 'UTF-8', $kod);
+            if (is_string($prevod) && mb_check_encoding($prevod, 'UTF-8')) return $prevod;
+        } catch (Throwable) {
+            continue;   // neznamy nazov kodovania v tomto builde PHP
+        }
+    }
+
+    // Posledna moznost: zahod bajty, ktore nie su platne UTF-8.
+    return (string)preg_replace('/[\x80-\xFF]/', '', $s);
+}
+
 function doc_cleanup(string $s): string {
+    // Prekodovanie MUSI byt prve — vzory s /u na neplatnom UTF-8 vracaju null.
+    $s = doc_do_utf8($s);
+
     $s = str_replace(["\r\n", "\r"], "\n", $s);
-    $s = preg_replace('/[^\P{C}\n\t]+/u', ' ', $s) ?? $s;   // riadiace znaky prec
-    $s = preg_replace('/[ \t\x{00A0}]+/u', ' ', $s);
-    $s = preg_replace('/\n\s*\n\s*\n+/', "\n\n", $s);
+    $s = preg_replace('/[^\P{C}\n\t]+/u', ' ', $s)   ?? $s;   // riadiace znaky prec
+    $s = preg_replace('/[ \t\x{00A0}]+/u', ' ', $s)  ?? $s;
+    $s = preg_replace('/\n[ \t]*\n[ \t]*\n+/', "\n\n", $s) ?? $s;
     return trim($s);
 }
 
 function doc_plain_text(string $path): string {
     $s = file_get_contents($path);
     if ($s === false) throw new RuntimeException('Súbor sa nedá načítať');
-    if (!mb_check_encoding($s, 'UTF-8')) {
-        $s = mb_convert_encoding($s, 'UTF-8', ['UTF-8', 'Windows-1250', 'ISO-8859-2']);
-    }
-    return $s;
+    return doc_do_utf8($s);
 }
 
 // DOCX aj ODT su ZIP archivy s XML vnutri.
@@ -69,27 +95,53 @@ function doc_rtf_text(string $path): string {
     $s = doc_plain_text($path);
     $s = preg_replace('/\{\\\\\*.*?\}/s', ' ', $s);       // skryte skupiny
     $s = preg_replace('/\\\\par[d]?\b/', "\n", $s);
-    // \'e9 = znak v kodovej stranke dokumentu; berieme Windows-1250 (stredna Europa)
+    // \'e9 = znak v kodovej stranke dokumentu (stredoeuropska)
     $s = preg_replace_callback("/\\\\'([0-9a-fA-F]{2})/", static function ($m) {
-        return mb_convert_encoding(chr(hexdec($m[1])), 'UTF-8', 'Windows-1250');
+        return doc_do_utf8(chr(hexdec($m[1])));
     }, $s) ?? $s;
     $s = preg_replace('/\\\\[a-z]+-?\d* ?/i', ' ', $s);   // riadiace slova
     return str_replace(['{', '}'], ' ', $s);
 }
 
 // ------------------------------------------------------------
-// PDF: najprv `pdftotext` (presnejsi), inak vlastny extraktor.
+// PDF: najprv `pdftotext` (presny), az potom vlastny extraktor.
+//
+// pdftotext rozumie kodovaniu fontov v PDF a vrati rovno UTF-8. Vlastny
+// extraktor nizsie je len zaloha pre servery, kde nastroj nie je — vytiahne
+// bajty tak, ako su v prude, a pri neanglickom texte z nich byva zmet.
 // ------------------------------------------------------------
 function doc_pdf_text(string $path): string {
-    if (function_exists('shell_exec') && !ini_get('safe_mode')) {
-        $bin = trim((string)@shell_exec('command -v pdftotext 2>/dev/null'));
-        if ($bin !== '') {
-            $out = @shell_exec(escapeshellcmd($bin) . ' -enc UTF-8 -q '
-                 . escapeshellarg($path) . ' - 2>/dev/null');
-            if (is_string($out) && mb_strlen(trim($out)) > 20) return $out;
-        }
-    }
+    $out = doc_pdftotext($path);
+    if ($out !== null) return $out;
+
     return doc_pdf_text_native($path);
+}
+
+// Vrati text z pdftotext, alebo null ked nastroj nie je / zlyhal.
+function doc_pdftotext(string $path): ?string {
+    if (!function_exists('shell_exec')) return null;
+
+    // Zakazane funkcie sa nedaju zistit cez function_exists — treba disable_functions.
+    $zakazane = array_map('trim', explode(',', (string)ini_get('disable_functions')));
+    if (in_array('shell_exec', $zakazane, true)) return null;
+
+    // 'command -v' je shell builtin a cez shell_exec nemusi byt dostupny,
+    // preto sa skusaju aj bezne cesty priamo.
+    $kandidati = ['pdftotext'];
+    foreach (['/usr/bin/pdftotext', '/usr/local/bin/pdftotext', '/bin/pdftotext'] as $c) {
+        if (is_executable($c)) array_unshift($kandidati, $c);
+    }
+
+    foreach ($kandidati as $bin) {
+        // -layout zachova stlpce, ktore ma vacsina zivotopisov
+        $out = @shell_exec(escapeshellarg($bin) . ' -enc UTF-8 -layout -q '
+             . escapeshellarg($path) . ' - 2>/dev/null');
+
+        // strlen, nie mb_strlen: na neplatnom UTF-8 by mb_strlen mohlo vratit 0
+        // a dobry vysledok by sa zahodil.
+        if (is_string($out) && strlen(trim($out)) > 20) return $out;
+    }
+    return null;
 }
 
 // Minimalny PDF extraktor: rozbali prudy komprimovane cez FlateDecode
@@ -119,8 +171,5 @@ function doc_pdf_text_native(string $path): string {
     if (trim($text) === '') {
         throw new RuntimeException('Z PDF sa nepodarilo vyťažiť text (pravdepodobne sken)');
     }
-    if (!mb_check_encoding($text, 'UTF-8')) {
-        $text = mb_convert_encoding($text, 'UTF-8', ['UTF-8', 'Windows-1250', 'ISO-8859-2']);
-    }
-    return $text;
+    return doc_do_utf8($text);
 }
