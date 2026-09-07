@@ -1,0 +1,13 @@
+# React router: kazda cesta, ktora nie je existujuci subor, ide na index.html.
+# Bez toho by /lab alebo /dokumenty vratili 404 pri priamom otvoreni alebo F5.
+#
+# /api/ je vynimka — tu obsluhuje PHP a ma vlastny .htaccess.
+RewriteEngine On
+RewriteBase /
+
+RewriteCond %{REQUEST_URI} ^/api/ [OR]
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+RewriteRule ^ index.html [L]

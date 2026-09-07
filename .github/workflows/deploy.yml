@@ -2,7 +2,7 @@ name: Deploy to fellow.sk
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   workflow_dispatch:
 
 env:
@@ -30,7 +30,7 @@ jobs:
         run: npm run build
         working-directory: web
         env:
-          VITE_API_URL: ${{ github.ref_name == 'main' && 'https://job.fellow.sk' || 'https://devjob.fellow.sk' }}/api
+          VITE_API_URL: https://job.fellow.sk/api
 
       # Assety maju v nazve hash, ktory sa pri kazdom builde meni. Nahraju sa
       # preto pred index.html — inak by stranka chvilu ziadala subor, ktory
@@ -42,8 +42,8 @@ jobs:
           username: ftp.fellow.sk
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: web/dist/
-          server-dir: ${{ github.ref_name == 'main' && '/sub/job/' || '/sub/devjob/' }}
-          state-name: ${{ github.ref_name == 'main' && '.ftp-deploy-sync-job-web.json' || '.ftp-deploy-sync-devjob-web.json' }}
+          server-dir: /sub/job/
+          state-name: .ftp-deploy-sync-job-web.json
           exclude: |
             **/.git*
             **/.git*/**
@@ -56,24 +56,24 @@ jobs:
         run: |
           sudo apt-get install -y --no-install-recommends lftp >/dev/null
           # Heslo berie lftp z premennej prostredia, takze sa neobjavi v zazname.
-          CMD="set ssl:verify-certificate no; cd $SERVER_DIR;"
+          CMD="set ssl:verify-certificate no; cd /sub/job/;"
           CMD="$CMD put -O . web/dist/index.html; bye"
           lftp -u "ftp.fellow.sk,$FTP_PASSWORD" fellow.sk -e "$CMD"
 
           # Overenie, ze nasadeny index.html ukazuje na build, ktory sme prave
           # postavili. Skusa sa opakovane — server nemusi novy subor podat hned.
-          BASE="https://${SERVER_DIR#/sub/}"
-          BASE="${BASE%/}.fellow.sk"
           OCAKAVANY=$(grep -o 'index-[A-Za-z0-9_-]*\.js' web/dist/index.html | head -1)
           echo "očakávaný build: ${OCAKAVANY:-?}"
 
           skus_overit() {
             for i in 1 2 3 4 5 6; do
               sleep 5
-              JS=$(curl -s -H 'Cache-Control: no-cache' "$BASE/?cb=$RANDOM" \
+              JS=$(curl -s -H 'Cache-Control: no-cache' "https://job.fellow.sk/?cb=$RANDOM" \
                    | grep -o 'index-[A-Za-z0-9_-]*\.js' | head -1)
               echo "  pokus $i: index.html -> ${JS:-?}"
-              [ -n "$JS" ] && { [ -z "$OCAKAVANY" ] || [ "$JS" = "$OCAKAVANY" ]; } && return 0
+              if [ -n "$JS" ] && { [ -z "$OCAKAVANY" ] || [ "$JS" = "$OCAKAVANY" ]; }; then
+                return 0
+              fi
             done
             return 1
           }
@@ -92,12 +92,10 @@ jobs:
           fi
         env:
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-          SERVER_DIR: ${{ github.ref_name == 'main' && '/sub/job/' || '/sub/devjob/' }}
 
-      # Konfiguracne subory s heslami a klucmi sa NENAHRAVAJU — na server sa
-      # daju raz rucne. Rovnako uploads/ (nahrate CV pouzivatelov).
-      - name: Deploy API via FTP (main)
-        if: github.ref_name == 'main'
+      # Konfiguracne subory s heslami a klucmi sa NENAHRAVAJU — su na serveri
+      # rucne. Rovnako uploads/ (nahrate CV pouzivatelov) a setup_once.php.
+      - name: Deploy API via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: fellow.sk
@@ -106,25 +104,6 @@ jobs:
           local-dir: api/
           server-dir: /sub/job/api/
           state-name: .ftp-deploy-sync-job-api.json
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/config/db.php
-            **/config/openrouter.php
-            **/config/mail.php
-            uploads/**
-            setup_once.php
-
-      - name: Deploy API via FTP (develop)
-        if: github.ref_name != 'main'
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: fellow.sk
-          username: ftp.fellow.sk
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: api/
-          server-dir: /sub/devjob/api/
-          state-name: .ftp-deploy-sync-devjob-api.json
           exclude: |
             **/.git*
             **/.git*/**

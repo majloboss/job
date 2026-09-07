@@ -1,0 +1,163 @@
+:root {
+  --bg:     #ffffff;
+  --fg:     #1a1d21;
+  --muted:  #6b7280;
+  --line:   #e3e6ea;
+  --accent: #1f6feb;
+  --ok:     #1a7f37;
+  --bad:    #cf222e;
+  --panel:  #f7f8fa;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:     #14171a;
+    --fg:     #e6e8eb;
+    --muted:  #9198a1;
+    --line:   #2a2f36;
+    --accent: #58a6ff;
+    --ok:     #3fb950;
+    --bad:    #f85149;
+    --panel:  #1c2025;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ---------- ram appky ---------- */
+.app-nav {
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+}
+.app-logo { font-weight: 700; letter-spacing: .5px; margin-right: 16px; padding: 14px 0; }
+
+.app-nav a {
+  padding: 14px 12px; color: var(--muted); text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+.app-nav a:hover { color: var(--fg); }
+.app-nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.app-logout {
+  margin-left: auto; padding: 6px 14px; font: inherit; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--fg);
+}
+.app-logout:hover { border-color: var(--bad); color: var(--bad); }
+
+/* ---------- spolocne pre stranky ---------- */
+.page { max-width: 900px; margin: 0 auto; padding: 24px 20px 64px; }
+.page h1 { margin: 0 0 4px; font-size: 22px; }
+.page-sub { margin: 0 0 24px; color: var(--muted); max-width: 70ch; }
+.page-muted { color: var(--muted); }
+
+.page-error, .page-ok, .login-error {
+  padding: 10px 14px; margin-bottom: 16px; border-radius: 6px;
+  border: 1px solid; border-left-width: 3px;
+}
+.page-error, .login-error {
+  border-color: var(--bad); color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 8%, transparent);
+}
+.page-ok {
+  border-color: var(--ok); color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+}
+
+.page label { display: block; margin-bottom: 14px; }
+.page label > span { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+
+.page input, .page select, .page textarea {
+  width: 100%; padding: 9px 11px; font: inherit;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--fg);
+}
+.page textarea { resize: vertical; font-family: inherit; }
+.page input:focus, .page select:focus, .page textarea:focus {
+  outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent;
+}
+
+.page button[type="submit"] {
+  padding: 10px 20px; font: inherit; font-weight: 600; cursor: pointer;
+  border: 0; border-radius: 6px; background: var(--accent); color: #fff;
+}
+.page button[type="submit"]:disabled { opacity: .55; cursor: default; }
+
+/* ---------- prihlasenie ---------- */
+.login { display: grid; place-items: center; min-height: 100vh; padding: 20px; }
+.login-box {
+  width: 100%; max-width: 340px; padding: 28px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+}
+.login-box h1 { margin: 0; font-size: 26px; letter-spacing: 1px; }
+.login-sub { margin: 2px 0 22px; color: var(--muted); }
+
+.login-box label { display: block; margin-bottom: 14px; }
+.login-box label > span { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.login-box input {
+  width: 100%; padding: 9px 11px; font: inherit;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--fg);
+}
+.login-box button {
+  width: 100%; padding: 10px; margin-top: 6px; font: inherit; font-weight: 600;
+  cursor: pointer; border: 0; border-radius: 6px; background: var(--accent); color: #fff;
+}
+.login-box button:disabled { opacity: .55; cursor: default; }
+
+/* ---------- dokumenty ---------- */
+.doc-upload {
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+  padding: 14px; margin-bottom: 24px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+}
+.doc-upload select, .doc-upload input { width: auto; flex: 1 1 180px; }
+.doc-upload button {
+  padding: 9px 18px; font: inherit; font-weight: 600; cursor: pointer;
+  border: 0; border-radius: 6px; background: var(--accent); color: #fff;
+}
+.doc-upload button:disabled { opacity: .55; cursor: default; }
+
+.doc-list { list-style: none; margin: 0; padding: 0; }
+.doc-list li {
+  padding: 12px 14px; margin-bottom: 8px;
+  border: 1px solid var(--line); border-radius: 8px;
+}
+.doc-list li.hlavny { border-color: var(--accent); }
+
+.doc-main { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.doc-typ  { color: var(--muted); font-size: 13px; }
+.doc-badge {
+  padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.doc-meta { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.doc-warn { color: var(--bad); }
+
+.doc-akcie { display: flex; gap: 8px; margin-top: 10px; }
+.doc-akcie button {
+  padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--fg);
+}
+.doc-akcie button:hover { border-color: var(--accent); color: var(--accent); }
+.doc-akcie button.zmazat:hover { border-color: var(--bad); color: var(--bad); }
+
+/* ---------- preferencie ---------- */
+.pref-text textarea { min-height: 200px; }
+
+.pref-doplnky {
+  margin: 20px 0; padding: 14px 16px;
+  border: 1px solid var(--line); border-radius: 8px;
+}
+.pref-doplnky legend { padding: 0 6px; font-weight: 600; font-size: 13px; }
+.pref-doplnky p { margin: 0 0 14px; font-size: 13px; }
+.pref-doplnky input { max-width: 200px; }

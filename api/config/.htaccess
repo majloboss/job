@@ -1,0 +1,3 @@
+# Konfiguracne subory obsahuju hesla a kluce — nesmu byt dostupne cez web.
+# PHP ich cez require nacita bez ohladu na toto pravidlo.
+Require all denied

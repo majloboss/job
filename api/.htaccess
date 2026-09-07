@@ -1,0 +1,8 @@
+# Vsetky poziadavky na /api/* obsluhuje index.php (router), okrem existujucich
+# suborov — health.php a setup_once.php sa volaju priamo.
+RewriteEngine On
+
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+RewriteRule ^(.*)$ index.php [QSA,L]

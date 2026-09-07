@@ -4,7 +4,7 @@ Agregátor pracovných ponúk zo slovenských pracovných portálov (v 1. fáze 
 so **scraperom bežiacim v pravidelných intervaloch**, vlastnou databázou inzerátov a
 **user manažmentom prevzatým z BetClub** (schéma `admin.*`).
 
-Legenda stavov: ✅ = v produkcii (main) | 🟠 = iba develop | 🔲 = TODO
+Legenda stavov: ✅ = nasadené | 🟠 = hotové v repe, nenasadené | 🔲 = TODO
 
 ---
 
@@ -37,9 +37,9 @@ Legenda stavov: ✅ = v produkcii (main) | 🟠 = iba develop | 🔲 = TODO
 | Cron | `api/cron/*.php` + Python scraper spúšťaný z cronu |
 | Posudzovanie | OpenRouter (bezplatné modely), výber modelu cez laboratórium |
 | Notifikácie | Web Push (VAPID) + e-mail (rovnaký `mailer.php`) |
-| Hosting | job.fellow.sk (prod) / devjob.fellow.sk (develop) |
-| Databázy | DB-JOB (prod) / DB-JOB-DEV (develop), PostgreSQL |
-| Deploy | GitHub Actions -> FTP, jediný secret `FTP_PASSWORD` |
+| Hosting | job.fellow.sk (`/sub/job/`), jedno prostredie |
+| Databáza | PostgreSQL na Websupporte |
+| Deploy | GitHub Actions -> FTP z vetvy `main`, jediný secret `FTP_PASSWORD` |
 
 Postup nasadenia: [docs/NASADENIE.md](docs/NASADENIE.md)
 
@@ -279,7 +279,8 @@ GET    /api/v1/admin/ai-lab?run_id=5   laboratórium: výsledky behu
 |---|---|---|
 | 1 | Založenie projektu, DB schéma `admin` + `job`, migrácia 001 | 🟠 |
 | 1b | Dokumenty (CV) + AI posudzovanie + laboratórium modelov, migrácia 002 | 🟠 |
-| 1c | Hosting, databázy, deploy workflow, prvý admin | 🟠 |
+| 1c | Hosting, databáza, deploy workflow, prvý admin | 🟠 |
+| 1d | React kostra: login, layout, dokumenty, preferencie | 🟠 |
 | 2 | Naplnenie číselníkov (lokality SK s GPS, profesie, mapovania portálov) | 🔲 |
 | 3 | Python scraper profesia.sk — zoznamy + detaily + HTML do `offer_content` | 🔲 |
 | 4 | Detekcia jazyka + preklad EN→SK do `offer_content` | 🔲 |
@@ -304,6 +305,6 @@ GET    /api/v1/admin/ai-lab?run_id=5   laboratórium: výsledky behu
 
 ## 9. Pracovné pravidlá projektu
 
-1. Push iba na `develop`, do `main` nikdy automaticky — iba na explicitný pokyn.
+1. Projekt má **jedno prostredie** — pracuje sa priamo na vetve `main`.
 2. Komunikácia a commit správy v slovenčine, formát `vX.YZ - popis`.
-3. Po každej zmene aktualizovať tento súbor (stavy ✅ / 🟠 / 🔲).
+3. Po každej zmene aktualizovať tento súbor (stavy ✅ / 🔲).
