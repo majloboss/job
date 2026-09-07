@@ -1,201 +1,324 @@
-/* Laboratorium modelov */
+/* Laboratorium modelov — mobile-first.
+   Vysledky su karty, nie tabulka: sedem stlpcov sa na telefon nezmesti. */
 
-.lab {
-  --bg:      #ffffff;
-  --fg:      #1a1d21;
-  --muted:   #6b7280;
-  --line:    #e3e6ea;
-  --accent:  #1f6feb;
-  --ok:      #1a7f37;
-  --warn:    #9a6700;
-  --bad:     #cf222e;
-  --panel:   #f7f8fa;
+/* ---------- zoznam modelov (zbalitelny) ---------- */
+.lab-modely {
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
 
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 24px 20px 64px;
+.lab-modely-prepinac {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--dotyk);
+  padding: 12px 14px;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  border: 0;
+  background: var(--panel);
   color: var(--fg);
-  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.lab-pocet {
+  margin-left: auto;
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--muted);
 }
 
-@media (prefers-color-scheme: dark) {
-  .lab {
-    --bg:    #14171a;
-    --fg:    #e6e8eb;
-    --muted: #9198a1;
-    --line:  #2a2f36;
-    --panel: #1c2025;
-    --accent:#58a6ff;
-    --ok:    #3fb950;
-    --warn:  #d29922;
-    --bad:   #f85149;
-  }
+/* Sipka: jednoduchy trojuholnik z ramceka, otoci sa pri rozbaleni. */
+.lab-sipka {
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--muted);
+  transition: transform .18s;
+}
+.lab-sipka.hore { transform: rotate(180deg); }
+
+.lab-modely-obsah {
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--line);
 }
 
-.lab-head h1 { margin: 0 0 4px; font-size: 22px; }
-.lab-sub     { margin: 0 0 24px; color: var(--muted); max-width: 70ch; }
+.lab-akcie { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.lab-akcie button {
+  flex: 1 1 auto;
+  min-height: 38px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+}
+.lab-akcie button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.lab-akcie button:disabled { opacity: .5; cursor: default; }
 
-.lab-error {
-  padding: 10px 14px; margin-bottom: 16px;
-  border: 1px solid var(--bad); border-left-width: 3px; border-radius: 6px;
-  background: color-mix(in srgb, var(--bad) 8%, transparent);
-  color: var(--bad);
+.lab-zoznam {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 45vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.lab-zoznam li + li { border-top: 1px solid var(--line); }
+
+.lab-zoznam label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--dotyk);
+  padding: 8px 2px;
+  margin: 0;
+  cursor: pointer;
+}
+.lab-zoznam input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  margin: 0;
+  accent-color: var(--accent);
 }
 
-.lab-muted { color: var(--muted); }
-.lab-warn  { color: var(--warn); font-style: normal; }
-
-/* ---- formular ---- */
-.lab-form { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
-
-.lab-field { display: flex; flex-direction: column; gap: 6px; flex: 1 1 420px; }
-.lab-field-narrow { flex: 0 1 260px; }
-.lab-field > span { font-weight: 600; font-size: 13px; }
-
-.lab-field input, .lab-field select {
-  padding: 9px 11px; font: inherit;
-  border: 1px solid var(--line); border-radius: 6px;
-  background: var(--bg); color: var(--fg);
+.lab-model-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.lab-model-nazov { font-size: 14px; }
+.lab-model-id {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.lab-field input:focus, .lab-field select:focus {
-  outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent;
+.lab-model-stat {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
-/* ---- zoznam modelov ---- */
-.lab-models { margin-bottom: 20px; }
-
-.lab-models-head {
-  display: flex; align-items: baseline; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap; margin-bottom: 10px;
+@media (min-width: 700px) {
+  .lab-akcie button { flex: 0 0 auto; }
+  .lab-model-id { font-size: 12px; }
 }
-.lab-models-head h2 { margin: 0; font-size: 15px; }
-.lab-count { margin-left: 10px; font-weight: 400; color: var(--muted); font-size: 13px; }
 
-.lab-actions { display: flex; gap: 8px; }
-.lab-actions button {
-  padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer;
-  border: 1px solid var(--line); border-radius: 6px;
-  background: var(--bg); color: var(--fg);
-}
-.lab-actions button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-.lab-actions button:disabled { opacity: .5; cursor: default; }
-
-.lab-model-list {
-  list-style: none; margin: 0; padding: 8px;
-  max-height: 300px; overflow-y: auto;
-  border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
-}
-.lab-model-list li { border-radius: 4px; }
-.lab-model-list li:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
-
-.lab-model-list label {
-  display: flex; align-items: center; gap: 10px;
-  padding: 5px 8px; cursor: pointer;
-}
-.lab-model-name { font-weight: 500; }
-.lab-model-id   { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; }
-.lab-model-ctx  {
-  margin-left: auto; color: var(--muted); font-size: 12px;
-  padding: 1px 6px; border: 1px solid var(--line); border-radius: 10px;
-}
-.lab-model-stat { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-
-/* ---- spustenie ---- */
-.lab-run { display: flex; gap: 10px; margin-bottom: 28px; }
+/* ---------- spustenie ---------- */
+.lab-spustenie { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
 
 .lab-start {
-  padding: 10px 20px; font: inherit; font-weight: 600; cursor: pointer;
-  border: 0; border-radius: 6px; background: var(--accent); color: #fff;
+  width: 100%;
+  min-height: var(--dotyk);
+  padding: 12px 20px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
 }
 .lab-start:disabled { opacity: .55; cursor: default; }
 
-.lab-cancel {
-  padding: 10px 16px; font: inherit; cursor: pointer;
-  border: 1px solid var(--bad); border-radius: 6px;
-  background: transparent; color: var(--bad);
+.lab-zastavit {
+  width: 100%;
+  min-height: var(--dotyk);
+  padding: 10px 16px;
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--bad);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--bad);
 }
 
-/* ---- vstup ---- */
-.lab-input {
-  padding: 14px 16px; margin-bottom: 24px;
-  border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
-}
-.lab-input h2 { margin: 0 0 10px; font-size: 15px; }
-.lab-input dl { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 0 0 10px; }
-.lab-input dl > div { display: flex; gap: 8px; }
-.lab-input dt { color: var(--muted); }
-.lab-input dd { margin: 0; font-weight: 500; }
-
-.lab-input summary { cursor: pointer; color: var(--accent); font-size: 13px; }
-.lab-preview {
-  max-height: 260px; overflow: auto; margin: 10px 0 0; padding: 10px;
-  border: 1px solid var(--line); border-radius: 6px; background: var(--bg);
-  font-size: 12px; white-space: pre-wrap; word-break: break-word;
+@media (min-width: 700px) {
+  .lab-spustenie { flex-direction: row; }
+  .lab-start, .lab-zastavit { width: auto; }
 }
 
-/* ---- vysledky ---- */
-.lab-results-head {
-  display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; margin-bottom: 10px;
+/* ---------- vstup ---------- */
+.lab-vstup {
+  padding: 14px;
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
 }
-.lab-results-head h2 { margin: 0; font-size: 15px; }
-.lab-progress { color: var(--muted); font-size: 13px; }
-.lab-progress code { font-size: 12px; }
-.lab-median { margin-left: auto; font-size: 13px; color: var(--muted); }
+.lab-vstup h2 { margin: 0 0 10px; font-size: 15px; }
+.lab-vstup dl { margin: 0 0 10px; }
+.lab-vstup dl > div {
+  display: flex;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 14px;
+}
+.lab-vstup dt { color: var(--muted); flex: 0 0 96px; }
+.lab-vstup dd { margin: 0; font-weight: 500; min-width: 0; }
+.lab-upozornenie { color: var(--warn); font-style: normal; }
 
-.lab-table {
-  width: 100%; border-collapse: collapse; font-size: 13px;
-  display: block; overflow-x: auto; white-space: nowrap;
+.lab-vstup summary {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 14px;
 }
-.lab-table thead th {
-  position: sticky; top: 0; z-index: 1;
-  padding: 8px 10px; text-align: left; font-weight: 600;
-  background: var(--panel); border-bottom: 1px solid var(--line);
-}
-.lab-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-.lab-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-
-.lab-table tbody tr:not(.lab-detail) { cursor: pointer; }
-.lab-table tbody tr:not(.lab-detail):hover td {
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
-}
-.lab-table tr.bad td { color: var(--muted); }
-
-.lab-td-model code { font-size: 12px; }
-.lab-td-summary {
-  max-width: 420px; white-space: normal;
+.lab-nahlad {
+  max-height: 240px;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
-.num.near { color: var(--ok); }
-.num.far  { color: var(--warn); }
+/* ---------- vysledky ---------- */
+.lab-vysledky-hlavicka {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.lab-vysledky-hlavicka h2 { margin: 0; font-size: 16px; }
+.lab-postup { margin-left: auto; font-size: 14px; color: var(--muted); }
 
-.lab-bucket {
-  display: inline-block; padding: 1px 8px; border-radius: 10px;
-  font-size: 12px; font-weight: 600;
+.lab-prave-bezi {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--muted);
 }
-.lab-bucket.vhodne {
-  color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent);
+.lab-prave-bezi code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
-.lab-bucket.menej_vhodne {
-  color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent);
-}
-.lab-bucket.nevhodne {
-  color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent);
-}
-.lab-fail { color: var(--bad); font-size: 12px; }
 
-/* ---- detail riadku ---- */
-.lab-detail td { background: var(--panel); white-space: normal; }
-
-.lab-detail-grid {
-  display: grid; gap: 20px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  padding: 4px 2px;
+.lab-karty { list-style: none; margin: 0; padding: 0; }
+.lab-karty > li {
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
-.lab-detail-grid h4 { margin: 0 0 6px; font-size: 13px; }
-.lab-detail-grid ul { margin: 0; padding-left: 18px; }
-.lab-detail-grid li { margin-bottom: 3px; }
+.lab-karty > li.zle { opacity: .75; }
 
-.lab-parsed { margin: 0; }
-.lab-parsed > div { display: flex; gap: 8px; margin-bottom: 3px; }
-.lab-parsed dt { color: var(--muted); min-width: 78px; }
-.lab-parsed dd { margin: 0; }
+.lab-karta-hlava {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border: 0;
+  background: none;
+  color: var(--fg);
+}
+
+.lab-karta-skore {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 46px;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.lab-karta-skore em {
+  font-size: 12px;
+  font-weight: 600;
+  font-style: normal;
+}
+.lab-karta-skore em.blizko { color: var(--ok); }
+.lab-karta-skore em.daleko { color: var(--warn); }
+
+.lab-karta-text { flex: 1; min-width: 0; }
+.lab-karta-model {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lab-karta-stav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+}
+.lab-karta-cas { font-size: 12px; color: var(--muted); }
+
+.lab-znacka {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.lab-znacka.vhodne {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+.lab-znacka.menej_vhodne {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+.lab-znacka.nevhodne {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 10%, transparent);
+}
+.lab-zlyhalo { color: var(--bad); font-size: 13px; }
+
+.lab-karta-zhrnutie, .lab-karta-chyba {
+  margin: 0;
+  padding: 0 14px 12px;
+  font-size: 14px;
+}
+.lab-karta-chyba { color: var(--bad); }
+
+/* ---------- detail karty ---------- */
+.lab-detail {
+  display: grid;
+  gap: 16px;
+  padding: 14px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+.lab-detail-blok h4 { margin: 0 0 6px; font-size: 14px; }
+.lab-detail-blok ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.lab-detail-blok li { margin-bottom: 3px; }
+.lab-detail-blok p { margin: 0; font-size: 14px; }
+
+.lab-vytazene { margin: 0; font-size: 14px; }
+.lab-vytazene > div { display: flex; gap: 8px; margin-bottom: 3px; }
+.lab-vytazene dt { color: var(--muted); flex: 0 0 78px; }
+.lab-vytazene dd { margin: 0; min-width: 0; }
+
+.lab-vysvetlivka { font-size: 13px; margin-top: 16px; }
+
+@media (min-width: 700px) {
+  .lab-detail { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .lab-karta-model { font-size: 13px; }
+}

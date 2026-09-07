@@ -1,3 +1,8 @@
+/* ============================================================
+   Zakladne styly — pisane mobile-first.
+   Zaklad plati pre telefon, @media (min-width: …) prida sirsie displeje.
+   ============================================================ */
+
 :root {
   --bg:     #ffffff;
   --fg:     #1a1d21;
@@ -5,8 +10,14 @@
   --line:   #e3e6ea;
   --accent: #1f6feb;
   --ok:     #1a7f37;
+  --warn:   #9a6700;
   --bad:    #cf222e;
   --panel:  #f7f8fa;
+
+  /* Dotykovy ciel ma mat aspon 44 px, aby sa dal na telefone trafit prstom. */
+  --dotyk:  44px;
+  --radius: 8px;
+
   color-scheme: light dark;
 }
 
@@ -18,6 +29,7 @@
     --line:   #2a2f36;
     --accent: #58a6ff;
     --ok:     #3fb950;
+    --warn:   #d29922;
     --bad:    #f85149;
     --panel:  #1c2025;
   }
@@ -25,139 +37,406 @@
 
 * { box-sizing: border-box; }
 
+html { -webkit-text-size-adjust: 100%; }
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Dlhe nazvy firiem a URL nesmu roztiahnut stranku do sirky. */
+  overflow-wrap: break-word;
 }
 
-/* ---------- ram appky ---------- */
-.app-nav {
-  display: flex; align-items: center; gap: 4px;
-  padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+img { max-width: 100%; height: auto; }
+
+/* ============================================================
+   HLAVICKA A NAVIGACIA
+   ============================================================ */
+
+.app-hlavicka {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  position: sticky;
+  top: 0;
+  z-index: 30;
 }
-.app-logo { font-weight: 700; letter-spacing: .5px; margin-right: 16px; padding: 14px 0; }
+
+.app-logo {
+  font-weight: 700;
+  letter-spacing: .5px;
+  padding: 14px 0;
+  margin-right: auto;
+}
+
+/* --- hamburger (len na mobile) --- */
+.app-hamburger {
+  width: var(--dotyk);
+  height: var(--dotyk);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.ikona-menu, .ikona-x {
+  position: relative;
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: currentColor;
+  transition: background .15s;
+}
+.ikona-menu::before, .ikona-menu::after,
+.ikona-x::before, .ikona-x::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  width: 22px;
+  height: 2px;
+  background: currentColor;
+  transition: transform .18s;
+}
+.ikona-menu::before { transform: translateY(-7px); }
+.ikona-menu::after  { transform: translateY(7px); }
+
+/* Krizik: prostredny prufok zmizne, krajne sa prekrizia. */
+.ikona-x { background: transparent; }
+.ikona-x::before { transform: rotate(45deg); }
+.ikona-x::after  { transform: rotate(-45deg); }
+
+/* --- menu: na mobile vysuvacie zhora --- */
+.app-nav {
+  position: fixed;
+  top: 57px;                 /* pod hlavickou */
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  transform: translateY(-120%);
+  transition: transform .2s ease;
+  z-index: 20;
+}
+.app-nav.otvorene { transform: translateY(0); }
 
 .app-nav a {
-  padding: 14px 12px; color: var(--muted); text-decoration: none;
-  border-bottom: 2px solid transparent;
+  display: flex;
+  align-items: center;
+  min-height: var(--dotyk);
+  padding: 0 20px;
+  color: var(--fg);
+  text-decoration: none;
+  border-left: 3px solid transparent;
 }
-.app-nav a:hover { color: var(--fg); }
-.app-nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
-
-.app-logout {
-  margin-left: auto; padding: 6px 14px; font: inherit; cursor: pointer;
-  border: 1px solid var(--line); border-radius: 6px;
-  background: var(--bg); color: var(--fg);
+.app-nav a.active {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
-.app-logout:hover { border-color: var(--bad); color: var(--bad); }
 
-/* ---------- spolocne pre stranky ---------- */
-.page { max-width: 900px; margin: 0 auto; padding: 24px 20px 64px; }
-.page h1 { margin: 0 0 4px; font-size: 22px; }
-.page-sub { margin: 0 0 24px; color: var(--muted); max-width: 70ch; }
+.app-odhlasit {
+  margin: 10px 20px 0;
+  min-height: var(--dotyk);
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.app-prekrytie {
+  position: fixed;
+  inset: 57px 0 0;
+  background: rgba(0, 0, 0, .35);
+  z-index: 10;
+}
+
+/* --- od tabletu vyssie: menu v riadku, hamburger prec --- */
+@media (min-width: 700px) {
+  .app-hamburger, .app-prekrytie { display: none; }
+
+  .app-logo { margin-right: 16px; }
+
+  .app-nav {
+    position: static;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    width: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    transform: none;
+    flex: 1;
+  }
+
+  .app-nav a {
+    min-height: auto;
+    padding: 16px 12px;
+    color: var(--muted);
+    border-left: 0;
+    border-bottom: 2px solid transparent;
+  }
+  .app-nav a:hover { color: var(--fg); }
+  .app-nav a.active {
+    color: var(--accent);
+    background: none;
+    border-bottom-color: var(--accent);
+  }
+
+  .app-odhlasit { margin: 0 0 0 auto; padding: 7px 14px; min-height: auto; }
+  .app-odhlasit:hover { border-color: var(--bad); color: var(--bad); }
+}
+
+/* ============================================================
+   SPOLOCNE PRE STRANKY
+   ============================================================ */
+
+.page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px 16px 56px;
+}
+.page h1 { margin: 0 0 4px; font-size: 20px; }
+.page-sub { margin: 0 0 20px; color: var(--muted); }
 .page-muted { color: var(--muted); }
 
+@media (min-width: 700px) {
+  .page { padding: 24px 20px 64px; }
+  .page h1 { font-size: 22px; }
+  .page-sub { max-width: 70ch; }
+}
+
 .page-error, .page-ok, .login-error {
-  padding: 10px 14px; margin-bottom: 16px; border-radius: 6px;
-  border: 1px solid; border-left-width: 3px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border-radius: var(--radius);
+  border: 1px solid;
+  border-left-width: 3px;
 }
 .page-error, .login-error {
-  border-color: var(--bad); color: var(--bad);
+  border-color: var(--bad);
+  color: var(--bad);
   background: color-mix(in srgb, var(--bad) 8%, transparent);
 }
 .page-ok {
-  border-color: var(--ok); color: var(--ok);
+  border-color: var(--ok);
+  color: var(--ok);
   background: color-mix(in srgb, var(--ok) 8%, transparent);
 }
 
 .page label { display: block; margin-bottom: 14px; }
-.page label > span { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+.page label > span {
+  display: block;
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
 
+/* Polia maju 16px pismo — pri mensom Safari na iPhone stranku priblizi. */
 .page input, .page select, .page textarea {
-  width: 100%; padding: 9px 11px; font: inherit;
-  border: 1px solid var(--line); border-radius: 6px;
-  background: var(--bg); color: var(--fg);
+  width: 100%;
+  min-height: var(--dotyk);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
 }
 .page textarea { resize: vertical; font-family: inherit; }
 .page input:focus, .page select:focus, .page textarea:focus {
-  outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent;
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-color: transparent;
 }
 
 .page button[type="submit"] {
-  padding: 10px 20px; font: inherit; font-weight: 600; cursor: pointer;
-  border: 0; border-radius: 6px; background: var(--accent); color: #fff;
+  width: 100%;
+  min-height: var(--dotyk);
+  padding: 12px 20px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
 }
 .page button[type="submit"]:disabled { opacity: .55; cursor: default; }
 
-/* ---------- prihlasenie ---------- */
-.login { display: grid; place-items: center; min-height: 100vh; padding: 20px; }
+@media (min-width: 700px) {
+  .page button[type="submit"] { width: auto; }
+}
+
+/* ============================================================
+   PRIHLASENIE
+   ============================================================ */
+
+.login {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;      /* na mobile bez listy prehliadaca */
+  padding: 20px 16px;
+}
 .login-box {
-  width: 100%; max-width: 340px; padding: 28px;
-  border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+  width: 100%;
+  max-width: 340px;
+  padding: 24px 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
 }
 .login-box h1 { margin: 0; font-size: 26px; letter-spacing: 1px; }
 .login-sub { margin: 2px 0 22px; color: var(--muted); }
 
 .login-box label { display: block; margin-bottom: 14px; }
-.login-box label > span { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.login-box label > span {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
 .login-box input {
-  width: 100%; padding: 9px 11px; font: inherit;
-  border: 1px solid var(--line); border-radius: 6px;
-  background: var(--bg); color: var(--fg);
+  width: 100%;
+  min-height: var(--dotyk);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
 }
 .login-box button {
-  width: 100%; padding: 10px; margin-top: 6px; font: inherit; font-weight: 600;
-  cursor: pointer; border: 0; border-radius: 6px; background: var(--accent); color: #fff;
+  width: 100%;
+  min-height: var(--dotyk);
+  margin-top: 6px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
 }
 .login-box button:disabled { opacity: .55; cursor: default; }
 
-/* ---------- dokumenty ---------- */
+/* ============================================================
+   DOKUMENTY
+   ============================================================ */
+
 .doc-upload {
-  display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
-  padding: 14px; margin-bottom: 24px;
-  border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
 }
-.doc-upload select, .doc-upload input { width: auto; flex: 1 1 180px; }
+.doc-upload select, .doc-upload input {
+  width: 100%;
+  min-height: var(--dotyk);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+}
 .doc-upload button {
-  padding: 9px 18px; font: inherit; font-weight: 600; cursor: pointer;
-  border: 0; border-radius: 6px; background: var(--accent); color: #fff;
+  min-height: var(--dotyk);
+  padding: 10px 18px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
 }
 .doc-upload button:disabled { opacity: .55; cursor: default; }
 
+@media (min-width: 700px) {
+  .doc-upload { flex-direction: row; align-items: center; flex-wrap: wrap; }
+  .doc-upload select { width: auto; flex: 0 1 200px; }
+  .doc-upload input  { width: auto; flex: 1 1 220px; }
+  .doc-upload button { flex: 0 0 auto; }
+}
+
 .doc-list { list-style: none; margin: 0; padding: 0; }
 .doc-list li {
-  padding: 12px 14px; margin-bottom: 8px;
-  border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 .doc-list li.hlavny { border-color: var(--accent); }
 
-.doc-main { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.doc-typ  { color: var(--muted); font-size: 13px; }
+.doc-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.doc-typ { color: var(--muted); font-size: 14px; }
 .doc-badge {
-  padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600;
-  color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
-.doc-meta { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.doc-meta { margin-top: 4px; color: var(--muted); font-size: 13px; }
 .doc-warn { color: var(--bad); }
 
-.doc-akcie { display: flex; gap: 8px; margin-top: 10px; }
+.doc-akcie { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .doc-akcie button {
-  padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer;
-  border: 1px solid var(--line); border-radius: 6px;
-  background: var(--bg); color: var(--fg);
+  flex: 1 1 auto;
+  min-height: 38px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
 }
 .doc-akcie button:hover { border-color: var(--accent); color: var(--accent); }
 .doc-akcie button.zmazat:hover { border-color: var(--bad); color: var(--bad); }
 
-/* ---------- preferencie ---------- */
-.pref-text textarea { min-height: 200px; }
+@media (min-width: 700px) {
+  .doc-akcie button { flex: 0 0 auto; }
+}
+
+/* ============================================================
+   PREFERENCIE
+   ============================================================ */
+
+.pref-text textarea { min-height: 180px; }
 
 .pref-doplnky {
-  margin: 20px 0; padding: 14px 16px;
-  border: 1px solid var(--line); border-radius: 8px;
+  margin: 20px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
-.pref-doplnky legend { padding: 0 6px; font-weight: 600; font-size: 13px; }
-.pref-doplnky p { margin: 0 0 14px; font-size: 13px; }
-.pref-doplnky input { max-width: 200px; }
+.pref-doplnky legend { padding: 0 6px; font-weight: 600; font-size: 14px; }
+.pref-doplnky p { margin: 0 0 14px; font-size: 14px; }
+
+@media (min-width: 700px) {
+  .pref-doplnky input { max-width: 220px; }
+}

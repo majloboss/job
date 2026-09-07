@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, Fragment } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { api } from '../api';
 import './AiLab.css';
 
@@ -7,6 +7,9 @@ import './AiLab.css';
 //
 // Modely sa volaju POSTUPNE, nie naraz — bezplatne modely maju limit
 // poziadaviek za minutu a paralelne volanie by skoncilo na 429.
+//
+// Vysledky su karty, nie tabulka: na telefone by sa sedem stlpcov
+// nezmestilo a vodorovne posuvanie sa zle ovlada.
 
 export default function AiLab() {
   const [models, setModels]     = useState([]);
@@ -22,6 +25,7 @@ export default function AiLab() {
   const [progress, setProgress] = useState({ done: 0, total: 0, current: null });
   const [error, setError]       = useState(null);
   const [expanded, setExpanded] = useState(null);
+  const [zoznamOtvoreny, setZoznamOtvoreny] = useState(false);
 
   const cancelRef = useRef(false);
 
@@ -33,8 +37,7 @@ export default function AiLab() {
     try {
       const r = await api('/v1/admin/ai-models');
       setModels(r.models);
-      // predvolene zaskrtni vsetky - to je zmysel porovnania
-      setSelected(new Set(r.models.map(m => m.id)));
+      setSelected(new Set(r.models.map(m => m.id)));   // vsetky = zmysel porovnania
     } catch (e) {
       setError(e.message);
     } finally {
@@ -55,33 +58,32 @@ export default function AiLab() {
   function toggle(id) {
     setSelected(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   }
 
   async function start() {
     const chosen = models.filter(m => selected.has(m.id)).map(m => m.id);
-    if (!url.trim())  { setError('Zadaj URL inzerátu'); return; }
+    if (!url.trim())    { setError('Zadaj URL inzerátu'); return; }
     if (!chosen.length) { setError('Vyber aspoň jeden model'); return; }
 
     setError(null);
     setResults([]);
     setRun(null);
     setExpanded(null);
+    setZoznamOtvoreny(false);
     setRunning(true);
     cancelRef.current = false;
     setProgress({ done: 0, total: chosen.length, current: null });
 
     try {
-      // 1. zaloz beh - stiahne inzerat a pripravi prompt
       const r = await api('/v1/admin/ai-lab', {
         method: 'POST',
         body: { url: url.trim(), models: chosen, document_id: docId ? Number(docId) : null },
       });
       setRun(r);
 
-      // 2. otestuj modely po jednom
       for (const model of chosen) {
         if (cancelRef.current) break;
         setProgress(p => ({ ...p, current: model }));
@@ -90,9 +92,9 @@ export default function AiLab() {
             method: 'POST',
             body: { run_id: r.run_id, model },
           });
-          setResults(prev => sortResults([...prev, one.result]));
+          setResults(prev => zorad([...prev, one.result]));
         } catch (e) {
-          setResults(prev => sortResults([...prev, {
+          setResults(prev => zorad([...prev, {
             model, ok: false, status: 'failed', error: e.message, score: null,
           }]));
         }
@@ -106,195 +108,195 @@ export default function AiLab() {
     }
   }
 
-  function sortResults(list) {
+  function zorad(list) {
     return [...list].sort((a, b) => {
-      if (a.ok !== b.ok) return a.ok ? -1 : 1;      // uspesne hore
+      if (a.ok !== b.ok) return a.ok ? -1 : 1;     // uspesne hore
       if (!a.ok) return 0;
-      return (b.score ?? 0) - (a.score ?? 0);       // potom podla skore
+      return (b.score ?? 0) - (a.score ?? 0);
     });
   }
 
-  const ok = results.filter(r => r.ok);
-  const scores = ok.map(r => r.score).filter(s => s !== null).sort((a, b) => a - b);
-  const median = scores.length
-    ? (scores.length % 2
-        ? scores[(scores.length - 1) / 2]
-        : Math.round((scores[scores.length / 2 - 1] + scores[scores.length / 2]) / 2))
+  const uspesne = results.filter(r => r.ok);
+  const skore = uspesne.map(r => r.score).filter(s => s !== null).sort((a, b) => a - b);
+  const median = skore.length
+    ? (skore.length % 2
+        ? skore[(skore.length - 1) / 2]
+        : Math.round((skore[skore.length / 2 - 1] + skore[skore.length / 2]) / 2))
     : null;
 
   return (
-    <div className="lab">
-      <header className="lab-head">
-        <h1>Laboratórium modelov</h1>
-        <p className="lab-sub">
-          Zadaj adresu inzerátu a porovnaj, ako ho posúdia jednotlivé bezplatné modely.
-          Podľa výsledku vyberieš ten, ktorý pôjde do produkcie.
-        </p>
-      </header>
+    <div className="page lab">
+      <h1>Laboratórium modelov</h1>
+      <p className="page-sub">
+        Zadaj adresu inzerátu a porovnaj, ako ho posúdia jednotlivé bezplatné modely.
+        Podľa výsledku vyberieš ten, ktorý pôjde do produkcie.
+      </p>
 
-      {error && <div className="lab-error">{error}</div>}
+      {error && <div className="page-error">{error}</div>}
 
-      <section className="lab-form">
-        <label className="lab-field">
-          <span>URL inzerátu</span>
-          <input
-            type="url"
-            value={url}
-            onChange={e => setUrl(e.target.value)}
-            placeholder="https://www.profesia.sk/praca/firma/O1234567"
-            disabled={running}
-          />
-        </label>
+      <label>
+        <span>URL inzerátu</span>
+        <input
+          type="url"
+          inputMode="url"
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          placeholder="https://www.profesia.sk/praca/firma/O1234567"
+          disabled={running}
+        />
+      </label>
 
-        <label className="lab-field lab-field-narrow">
-          <span>Životopis do posudku</span>
-          <select value={docId} onChange={e => setDocId(e.target.value)} disabled={running}>
-            <option value="">(bez životopisu)</option>
-            {docs.map(d => (
-              <option key={d.id} value={d.id}>
-                {d.title}{d.is_primary ? ' — hlavný' : ''}
-              </option>
-            ))}
-          </select>
-        </label>
-      </section>
-
-      <section className="lab-models">
-        <div className="lab-models-head">
-          <h2>
-            Bezplatné modely
-            <span className="lab-count">
-              {selected.size} / {models.length} vybraných
-            </span>
-          </h2>
-          <div className="lab-actions">
-            <button type="button" onClick={() => setSelected(new Set(models.map(m => m.id)))}
-                    disabled={running}>Všetky</button>
-            <button type="button" onClick={() => setSelected(new Set())}
-                    disabled={running}>Žiadny</button>
-            <button type="button" onClick={loadModels} disabled={running || loading}>
-              {loading ? 'Načítavam…' : 'Obnoviť zoznam'}
-            </button>
-          </div>
-        </div>
-
-        {loading && <p className="lab-muted">Načítavam zoznam modelov z OpenRoutera…</p>}
-
-        <ul className="lab-model-list">
-          {models.map(m => (
-            <li key={m.id}>
-              <label>
-                <input type="checkbox" checked={selected.has(m.id)}
-                       onChange={() => toggle(m.id)} disabled={running} />
-                <span className="lab-model-name">{m.name}</span>
-                <span className="lab-model-id">{m.id}</span>
-                {m.context && <span className="lab-model-ctx">{(m.context / 1000).toFixed(0)}k</span>}
-                {m.lab_runs > 0 && (
-                  <span className="lab-model-stat" title="úspešné behy / celkom">
-                    {m.lab_ok}/{m.lab_runs}
-                    {m.avg_ms ? ` · ${(m.avg_ms / 1000).toFixed(1)}s` : ''}
-                  </span>
-                )}
-              </label>
-            </li>
+      <label>
+        <span>Životopis do posudku</span>
+        <select value={docId} onChange={e => setDocId(e.target.value)} disabled={running}>
+          <option value="">(bez životopisu)</option>
+          {docs.map(d => (
+            <option key={d.id} value={d.id}>
+              {d.title}{d.is_primary ? ' — hlavný' : ''}
+            </option>
           ))}
-        </ul>
+        </select>
+      </label>
+
+      {/* Zoznam modelov je na mobile zbalený — býva ich aj 30. */}
+      <section className="lab-modely">
+        <button
+          type="button"
+          className="lab-modely-prepinac"
+          onClick={() => setZoznamOtvoreny(o => !o)}
+          aria-expanded={zoznamOtvoreny}
+        >
+          <span>Bezplatné modely</span>
+          <span className="lab-pocet">{selected.size} / {models.length}</span>
+          <span className={'lab-sipka' + (zoznamOtvoreny ? ' hore' : '')} aria-hidden="true" />
+        </button>
+
+        {zoznamOtvoreny && (
+          <div className="lab-modely-obsah">
+            <div className="lab-akcie">
+              <button type="button" onClick={() => setSelected(new Set(models.map(m => m.id)))}
+                      disabled={running}>Všetky</button>
+              <button type="button" onClick={() => setSelected(new Set())}
+                      disabled={running}>Žiadny</button>
+              <button type="button" onClick={loadModels} disabled={running || loading}>
+                {loading ? 'Načítavam…' : 'Obnoviť'}
+              </button>
+            </div>
+
+            {loading && <p className="page-muted">Načítavam zoznam z OpenRoutera…</p>}
+
+            <ul className="lab-zoznam">
+              {models.map(m => (
+                <li key={m.id}>
+                  <label>
+                    <input type="checkbox" checked={selected.has(m.id)}
+                           onChange={() => toggle(m.id)} disabled={running} />
+                    <span className="lab-model-info">
+                      <span className="lab-model-nazov">{m.name}</span>
+                      <span className="lab-model-id">{m.id}</span>
+                    </span>
+                    {m.lab_runs > 0 && (
+                      <span className="lab-model-stat" title="úspešné behy / celkom">
+                        {m.lab_ok}/{m.lab_runs}
+                      </span>
+                    )}
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
-      <div className="lab-run">
+      <div className="lab-spustenie">
         <button className="lab-start" onClick={start} disabled={running || !models.length}>
           {running ? 'Prebieha posudzovanie…' : `Spustiť posúdenie (${selected.size})`}
         </button>
         {running && (
-          <button className="lab-cancel" onClick={() => { cancelRef.current = true; }}>
+          <button className="lab-zastavit" onClick={() => { cancelRef.current = true; }}>
             Zastaviť
           </button>
         )}
       </div>
 
       {run && (
-        <section className="lab-input">
+        <section className="lab-vstup">
           <h2>Vstup pre modely</h2>
           <dl>
             <div><dt>Inzerát</dt><dd>{run.title || '(bez názvu)'}</dd></div>
-            <div><dt>Dĺžka textu</dt>
+            <div><dt>Dĺžka</dt>
               <dd>{run.input_chars.toLocaleString('sk')} znakov
-                  {run.truncated && <em className="lab-warn"> — skrátené pre modely</em>}</dd></div>
+                  {run.truncated && <em className="lab-upozornenie"> — skrátené</em>}</dd></div>
             <div><dt>Životopis</dt><dd>{run.has_cv ? 'áno' : 'nie je nahraný'}</dd></div>
             <div><dt>Preferencie</dt><dd>{run.has_prefs ? 'áno' : 'nie sú vyplnené'}</dd></div>
           </dl>
           <details>
-            <summary>Ukážka textu, ktorý ide do modelu</summary>
-            <pre className="lab-preview">{run.preview}</pre>
+            <summary>Ukážka textu pre model</summary>
+            <pre className="lab-nahlad">{run.preview}</pre>
           </details>
         </section>
       )}
 
       {(running || results.length > 0) && (
-        <section className="lab-results">
-          <div className="lab-results-head">
+        <section className="lab-vysledky">
+          <div className="lab-vysledky-hlavicka">
             <h2>Výsledky</h2>
-            <span className="lab-progress">
+            <span className="lab-postup">
               {progress.done} / {progress.total}
-              {progress.current && <> · práve beží <code>{progress.current}</code></>}
+              {median !== null && <> · medián <strong>{median}</strong></>}
             </span>
-            {median !== null && (
-              <span className="lab-median">Medián skóre: <strong>{median}</strong></span>
-            )}
           </div>
 
-          <table className="lab-table">
-            <thead>
-              <tr>
-                <th>Model</th>
-                <th className="num">Skóre</th>
-                <th className="num">Odchýlka</th>
-                <th>Vhodnosť</th>
-                <th>Zhrnutie</th>
-                <th className="num">Tokeny</th>
-                <th className="num">Čas</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.map(r => {
-                const diff = (median !== null && r.score !== null) ? r.score - median : null;
-                return (
-                  <Fragment key={r.model}>
-                    <tr className={r.ok ? 'ok' : 'bad'}
-                        onClick={() => setExpanded(expanded === r.model ? null : r.model)}>
-                      <td className="lab-td-model">
-                        <code>{r.model}</code>
-                      </td>
-                      <td className="num">{r.score ?? '—'}</td>
-                      <td className={'num ' + (diff === null ? '' : Math.abs(diff) <= 5 ? 'near' : 'far')}>
-                        {diff === null ? '—' : (diff > 0 ? `+${diff}` : diff)}
-                      </td>
-                      <td>
+          {progress.current && (
+            <p className="lab-prave-bezi">
+              práve beží <code>{progress.current}</code>
+            </p>
+          )}
+
+          <ul className="lab-karty">
+            {results.map(r => {
+              const odchylka = (median !== null && r.score !== null) ? r.score - median : null;
+              const otvorena = expanded === r.model;
+              return (
+                <li key={r.model} className={r.ok ? 'ok' : 'zle'}>
+                  <button
+                    className="lab-karta-hlava"
+                    onClick={() => setExpanded(otvorena ? null : r.model)}
+                    aria-expanded={otvorena}
+                  >
+                    <span className="lab-karta-skore">
+                      {r.score ?? '—'}
+                      {odchylka !== null && (
+                        <em className={Math.abs(odchylka) <= 5 ? 'blizko' : 'daleko'}>
+                          {odchylka > 0 ? `+${odchylka}` : odchylka}
+                        </em>
+                      )}
+                    </span>
+                    <span className="lab-karta-text">
+                      <code className="lab-karta-model">{r.model}</code>
+                      <span className="lab-karta-stav">
                         {r.bucket
-                          ? <span className={'lab-bucket ' + r.bucket}>{bucketLabel(r.bucket)}</span>
-                          : <span className="lab-fail">{failLabel(r.status)}</span>}
-                      </td>
-                      <td className="lab-td-summary">{r.summary || r.error || '—'}</td>
-                      <td className="num">{r.tokens ?? '—'}</td>
-                      <td className="num">{r.ms ? `${(r.ms / 1000).toFixed(1)}s` : '—'}</td>
-                    </tr>
-                    {expanded === r.model && (
-                      <tr className="lab-detail">
-                        <td colSpan={7}>
-                          <Detail r={r} />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+                          ? <span className={'lab-znacka ' + r.bucket}>{popisVhodnosti(r.bucket)}</span>
+                          : <span className="lab-zlyhalo">{popisChyby(r.status)}</span>}
+                        {r.ms && <span className="lab-karta-cas">{(r.ms / 1000).toFixed(1)} s</span>}
+                      </span>
+                    </span>
+                    <span className={'lab-sipka' + (otvorena ? ' hore' : '')} aria-hidden="true" />
+                  </button>
+
+                  {r.summary && <p className="lab-karta-zhrnutie">{r.summary}</p>}
+                  {!r.summary && r.error && <p className="lab-karta-chyba">{r.error}</p>}
+
+                  {otvorena && <Detail r={r} />}
+                </li>
+              );
+            })}
+          </ul>
 
           {!running && results.length > 0 && (
-            <p className="lab-muted">
-              Klikni na riadok pre detail. Modely s odchýlkou do 5 bodov od mediánu
-              sa zhodujú s ostatnými; veľká odchýlka znamená, že model hodnotí inak.
+            <p className="page-muted lab-vysvetlivka">
+              Klikni na kartu pre detail. Odchýlka do 5 bodov od mediánu znamená,
+              že model hodnotí ako ostatné; väčšia odchýlka, že hodnotí inak.
             </p>
           )}
         </section>
@@ -306,25 +308,14 @@ export default function AiLab() {
 function Detail({ r }) {
   const p = r.parsed || {};
   return (
-    <div className="lab-detail-grid">
-      <div>
-        <h4>Hovorí pre</h4>
-        <ul>{(r.pros || []).map((x, i) => <li key={i}>{x}</li>)}</ul>
-        {!r.pros?.length && <p className="lab-muted">—</p>}
-      </div>
-      <div>
-        <h4>Hovorí proti</h4>
-        <ul>{(r.cons || []).map((x, i) => <li key={i}>{x}</li>)}</ul>
-        {!r.cons?.length && <p className="lab-muted">—</p>}
-      </div>
-      <div>
-        <h4>Čo mi chýba</h4>
-        <ul>{(r.missing_skills || []).map((x, i) => <li key={i}>{x}</li>)}</ul>
-        {!r.missing_skills?.length && <p className="lab-muted">—</p>}
-      </div>
-      <div>
+    <div className="lab-detail">
+      <Zoznam nadpis="Hovorí pre"   polozky={r.pros} />
+      <Zoznam nadpis="Hovorí proti" polozky={r.cons} />
+      <Zoznam nadpis="Čo mi chýba"  polozky={r.missing_skills} />
+
+      <div className="lab-detail-blok">
         <h4>Vyťažené z inzerátu</h4>
-        <dl className="lab-parsed">
+        <dl className="lab-vytazene">
           <div><dt>Profesia</dt><dd>{p.profession ?? '—'}</dd></div>
           <div><dt>Úväzok</dt><dd>{p.employment_type ?? '—'}</dd></div>
           <div><dt>Miesto</dt><dd>{(p.locations || []).join(', ') || '—'}</dd></div>
@@ -334,20 +325,34 @@ function Detail({ r }) {
                   : '—'}</dd></div>
           <div><dt>Jazyky</dt>
             <dd>{(p.languages || []).map(l => `${l.code} ${l.level ?? ''}`).join(', ') || '—'}</dd></div>
-          <div><dt>Agentúra</dt><dd>{p.is_agency === true ? 'áno' : p.is_agency === false ? 'nie' : '—'}</dd></div>
+          <div><dt>Agentúra</dt>
+            <dd>{p.is_agency === true ? 'áno' : p.is_agency === false ? 'nie' : '—'}</dd></div>
         </dl>
       </div>
     </div>
   );
 }
 
-function bucketLabel(b) {
+function Zoznam({ nadpis, polozky }) {
+  return (
+    <div className="lab-detail-blok">
+      <h4>{nadpis}</h4>
+      {polozky?.length
+        ? <ul>{polozky.map((x, i) => <li key={i}>{x}</li>)}</ul>
+        : <p className="page-muted">—</p>}
+    </div>
+  );
+}
+
+function popisVhodnosti(b) {
   return { vhodne: 'Vhodné', menej_vhodne: 'Menej vhodné', nevhodne: 'Nevhodné' }[b] ?? b;
 }
 
-function failLabel(status) {
+function popisChyby(status) {
   return {
-    failed: 'Zlyhalo', rate_limited: 'Limit požiadaviek',
-    invalid_json: 'Neplatný JSON', truncated: 'Orezaná odpoveď',
+    failed: 'Zlyhalo',
+    rate_limited: 'Limit požiadaviek',
+    invalid_json: 'Neplatný JSON',
+    truncated: 'Orezaná odpoveď',
   }[status] ?? 'Chyba';
 }

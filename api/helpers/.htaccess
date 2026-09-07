@@ -1,5 +1,4 @@
-# Tieto skripty sa nesmu volat priamo — spoliehaju sa na to, ze ich nacita
-# index.php, ktory uz ma nacitanu konfiguraciu a pomocne funkcie.
-# Priame volanie by v lepsom pripade skoncilo chybou, v horsom by server
-# podal zdrojak (napr. ked je zapnute MultiViews).
+# Pomocne skripty sa nesmu volat priamo cez HTTP — spoliehaju sa na to, ze ich
+# nacita index.php, ktory uz ma nacitanu konfiguraciu.
+# PHP require ide cez filesystem, toto pravidlo mu nebrani.
 Require all denied

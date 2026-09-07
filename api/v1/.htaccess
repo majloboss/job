@@ -1,5 +1,0 @@
-# Tieto skripty sa nesmu volat priamo — spoliehaju sa na to, ze ich nacita
-# index.php, ktory uz ma nacitanu konfiguraciu a pomocne funkcie.
-# Priame volanie by v lepsom pripade skoncilo chybou, v horsom by server
-# podal zdrojak (napr. ked je zapnute MultiViews).
-Require all denied
