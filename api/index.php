@@ -32,6 +32,7 @@ try {
         // laboratorium modelov
         $path === 'v1/admin/ai-models' => require __DIR__ . '/v1/admin/ai_models.php',
         $path === 'v1/admin/ai-lab'    => require __DIR__ . '/v1/admin/ai_lab.php',
+        $path === 'v1/admin/ai-naklady'=> require __DIR__ . '/v1/admin/ai_naklady.php',
 
         default => json_error('Neznámy endpoint: ' . $path, 404),
     };

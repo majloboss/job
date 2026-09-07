@@ -109,6 +109,39 @@ function or_free_models(): array {
     return $free;
 }
 
+// ------------------------------------------------------------
+// Cennik vsetkych modelov na OpenRouteri.
+//
+// Vracia [model_id => ['vstup' => cena, 'vystup' => cena, 'nazov' => ...]],
+// kde cena je v USD za JEDEN token (tak to OpenRouter uvadza). Na porovnanie
+// s beznymi cennikmi sa nasobi milionom.
+// ------------------------------------------------------------
+function or_cennik(): array {
+    $ch = curl_init('https://openrouter.ai/api/v1/models');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 25,
+        CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . OPENROUTER_KEY],
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($code !== 200 || !$resp) return [];
+
+    $cennik = [];
+    foreach (json_decode($resp, true)['data'] ?? [] as $m) {
+        $p = $m['pricing'] ?? [];
+        $cennik[$m['id']] = [
+            'nazov'   => $m['name'] ?? $m['id'],
+            'vstup'   => isset($p['prompt'])     ? (float)$p['prompt']     : null,
+            'vystup'  => isset($p['completion']) ? (float)$p['completion'] : null,
+            'context' => $m['context_length'] ?? null,
+        ];
+    }
+    return $cennik;
+}
+
 // Zosynchronizuje ciselnik job.ai_models s aktualnym zoznamom z OpenRoutera.
 function or_sync_models(array $free): void {
     $pdo = db();

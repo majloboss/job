@@ -334,3 +334,47 @@
   .lab-detail { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
   .lab-karta-model { font-size: 13px; }
 }
+
+/* ---------- naklady na plateny model ---------- */
+.lab-naklady { margin-top: 20px; }
+
+.lab-naklady-tlacidlo {
+  width: 100%;
+  min-height: var(--dotyk);
+  padding: 10px 16px;
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--accent);
+}
+.lab-naklady-tlacidlo:hover:not(:disabled) { border-color: var(--accent); }
+.lab-naklady-tlacidlo:disabled { opacity: .55; cursor: default; }
+
+.lab-naklady h3 { margin: 0 0 6px; font-size: 15px; }
+.lab-naklady p  { margin: 0 0 12px; font-size: 14px; }
+
+/* Tabulka sa na uzkom displeji posuva vodorovne vo vlastnom ramceku,
+   stranka pod nou zostava na mieste. */
+.lab-naklady-tabulka { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.lab-naklady table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.lab-naklady th {
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 600;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.lab-naklady td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.lab-naklady .num { text-align: right; font-variant-numeric: tabular-nums; }
+.lab-naklady code { font-size: 12px; }

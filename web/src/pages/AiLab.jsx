@@ -304,13 +304,86 @@ export default function AiLab() {
           </ul>
 
           {!running && results.length > 0 && (
-            <p className="page-muted lab-vysvetlivka">
-              Klikni na kartu pre detail. Odchýlka do 5 bodov od mediánu znamená,
-              že model hodnotí ako ostatné; väčšia odchýlka, že hodnotí inak.
-            </p>
+            <>
+              <p className="page-muted lab-vysvetlivka">
+                Klikni na kartu pre detail. Odchýlka do 5 bodov od mediánu znamená,
+                že model hodnotí ako ostatné; väčšia odchýlka, že hodnotí inak.
+              </p>
+              <Naklady runId={run?.run_id} />
+            </>
           )}
         </section>
       )}
+    </div>
+  );
+}
+
+// Kolko tokenov posudenie minulo a co by to stalo na platenych modeloch.
+// Nacita sa az na poziadanie — je to dalsie volanie do OpenRoutera.
+function Naklady({ runId }) {
+  const [data, setData]   = useState(null);
+  const [caka, setCaka]   = useState(false);
+  const [chyba, setChyba] = useState(null);
+
+  async function nacitat() {
+    setCaka(true);
+    setChyba(null);
+    try {
+      setData(await api('/v1/admin/ai-naklady' + (runId ? `?run_id=${runId}` : '')));
+    } catch (e) {
+      setChyba(e.message);
+    } finally {
+      setCaka(false);
+    }
+  }
+
+  if (!data) {
+    return (
+      <div className="lab-naklady">
+        <button type="button" className="lab-naklady-tlacidlo" onClick={nacitat} disabled={caka}>
+          {caka ? 'Počítam…' : 'Koľko by to stálo na platených modeloch?'}
+        </button>
+        {chyba && <p className="lab-karta-chyba">{chyba}</p>}
+      </div>
+    );
+  }
+
+  const s = data.spotreba;
+  return (
+    <div className="lab-naklady">
+      <h3>Náklady na jedno posúdenie</h3>
+      <p className="page-muted">
+        Spotreba: <strong>{s.vstup_tokenov.toLocaleString('sk')}</strong> tokenov na vstupe
+        {' + '}<strong>{s.vystup_tokenov.toLocaleString('sk')}</strong> na výstupe
+        {' '}({s.zdroj}, {s.meranych} meraní)
+      </p>
+
+      <div className="lab-naklady-tabulka">
+        <table>
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th className="num">1 posudok</th>
+              <th className="num">100</th>
+              <th className="num">1 000</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.modely.map(m => (
+              <tr key={m.model}>
+                <td><code>{m.model}</code></td>
+                <td className="num">${m.za_posudok.toFixed(5)}</td>
+                <td className="num">${m.za_100.toFixed(2)}</td>
+                <td className="num">${m.za_1000.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="page-muted lab-vysvetlivka">
+        Ceny v USD za jeden inzerát a jedného používateľa. Bezplatné modely stoja 0,
+        majú však limity požiadaviek a ich dostupnosť sa mení.
+      </p>
     </div>
   );
 }

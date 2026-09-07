@@ -155,8 +155,11 @@ $st = $pdo->prepare('SELECT free_text FROM job.user_preferences WHERE user_id = 
 $st->execute([$auth['user_id']]);
 $prefsText = (string)($st->fetchColumn() ?: '');
 
-$docId = isset($body['document_id']) ? (int)$body['document_id'] : null;
-if ($docId) {
+// Frontend posiela document_id: null, ked nie je nic vybrate — isset() by
+// v tom pripade vratilo false rovnako ako pri chybajucom kluci, co je tu
+// spravne: obe znamenaju "vyber hlavne CV".
+$docId = (int)($body['document_id'] ?? 0);
+if ($docId > 0) {
     $st = $pdo->prepare(
         'SELECT id, extracted_text FROM job.user_documents WHERE id = ? AND user_id = ?');
     $st->execute([$docId, $auth['user_id']]);
