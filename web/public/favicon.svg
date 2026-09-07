@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="JOB">
+  <!--
+    Pracovnik s ochrannou prilbou — linkova kresba v modrej appky (#1f6feb).
+
+    Kreslene pre malu velkost. Prve verzie mali tenke linky a golier do V,
+    co pri 16 px splynulo do skvrny. Preto:
+      - linky su hrube 5.5 px pri platne 64 px (pri 16 px vyjde ~1.4 px)
+      - golier a rebro na prilbe su prec, ostava silueta prilba + hlava + ramena
+      - tvary su vacsie a od seba dalej, aby sa pri zmensovani nezliali
+  -->
+  <g fill="none" stroke="#1f6feb" stroke-width="5.5"
+     stroke-linecap="round" stroke-linejoin="round">
+
+    <!-- kupola prilby -->
+    <path d="M18 25a14 14 0 0 1 28 0" />
+    <!-- strieska prilby, siroka aby bola prilba rozoznatelna aj v malom -->
+    <path d="M11 26h42" />
+
+    <!-- tvar pod prilbou -->
+    <path d="M22 29v2a10 10 0 0 0 20 0v-2" />
+
+    <!-- ramena -->
+    <path d="M12 56v-4a12 12 0 0 1 12-12h16a12 12 0 0 1 12 12v4" />
+  </g>
+</svg>

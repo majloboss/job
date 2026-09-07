@@ -24,3 +24,6 @@ web/dist/
 *.log
 scraper/raw/
 scraper/out/
+
+# nahlad favikony (generovany, len na kontrolu)
+nahlad_favicon.png
