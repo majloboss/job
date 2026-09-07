@@ -29,7 +29,33 @@ function doc_extract_text(string $path, string $mime): array {
     if (mb_strlen($text) < 20) {
         return [null, 'Zo súboru sa nepodarilo vyťažiť text (možno je to sken)'];
     }
+    if (!doc_je_citatelny($text)) {
+        return [null, 'Vyťažený text je nečitateľný — súbor sa uložil, '
+                    . 'ale do posudzovania nepôjde. Skús ho uložiť ako DOCX.'];
+    }
     return [mb_substr($text, 0, 60000), null];
+}
+
+// Je vytazeny text naozaj text, alebo zmet znakov?
+//
+// Zalozny PDF extraktor pri vlozenych fontoch vracia bajty, ktore su sice
+// platne UTF-8, ale citat sa nedaju ("7ÝI˝ł ňąÓQ %a¸BČA"). Take nieco nema
+// zmysel posielat modelu — lepsie je priznat, ze sa text nevytazil.
+//
+// Rozlisuje sa podielom beznych znakov: v skutocnom texte (aj slovenskom)
+// je vacsina pismen zakladna latinka, cislice, medzery a interpunkcia.
+function doc_je_citatelny(string $text): bool {
+    $vzorka = mb_substr($text, 0, 3000);
+    $spolu  = mb_strlen($vzorka);
+    if ($spolu < 20) return false;
+
+    // zakladna latinka + slovenska diakritika + cislice a bezna interpunkcia
+    $bezne = preg_match_all(
+        '/[a-zA-Z0-9\s.,;:!?()\/@+—–\-\'"àáäčďéěíĺľňóôöŕřšťúůüýžÀÁÄČĎÉĚÍĹĽŇÓÔÖŔŘŠŤÚŮÜÝŽ]/u',
+        $vzorka
+    );
+
+    return $bezne !== false && ($bezne / $spolu) >= 0.85;
 }
 
 // Zabezpeci, ze retazec je platne UTF-8.
@@ -118,29 +144,43 @@ function doc_pdf_text(string $path): string {
 }
 
 // Vrati text z pdftotext, alebo null ked nastroj nie je / zlyhal.
+//
+// POUZIVA SA proc_open S POLOM ARGUMENTOV, nie shell_exec ani exec.
+// Na Websupporte su shell_exec aj exec definovane a nie su v disable_functions,
+// ale spustenie cez shell nic nevrati (shell_exec 0 B, exec navratovy kod -1).
+// proc_open s polom obchadza shell a funguje — overene diagnostikou na
+// produkcii: navratovy kod 0, 9,6 kB spravneho UTF-8 textu vratane diakritiky.
+//
+// Pole argumentov ma este jednu vyhodu: nic sa neinterpretuje shellom, takze
+// nazov suboru netreba escapovat.
 function doc_pdftotext(string $path): ?string {
-    if (!function_exists('shell_exec')) return null;
+    if (!function_exists('proc_open')) return null;
 
-    // Zakazane funkcie sa nedaju zistit cez function_exists — treba disable_functions.
     $zakazane = array_map('trim', explode(',', (string)ini_get('disable_functions')));
-    if (in_array('shell_exec', $zakazane, true)) return null;
+    if (in_array('proc_open', $zakazane, true)) return null;
 
-    // 'command -v' je shell builtin a cez shell_exec nemusi byt dostupny,
-    // preto sa skusaju aj bezne cesty priamo.
-    $kandidati = ['pdftotext'];
-    foreach (['/usr/bin/pdftotext', '/usr/local/bin/pdftotext', '/bin/pdftotext'] as $c) {
-        if (is_executable($c)) array_unshift($kandidati, $c);
+    $bin = null;
+    foreach (['/usr/bin/pdftotext', '/bin/pdftotext', '/usr/local/bin/pdftotext'] as $c) {
+        if (is_executable($c)) { $bin = $c; break; }
     }
+    if ($bin === null) return null;
 
-    foreach ($kandidati as $bin) {
-        // -layout zachova stlpce, ktore ma vacsina zivotopisov
-        $out = @shell_exec(escapeshellarg($bin) . ' -enc UTF-8 -layout -q '
-             . escapeshellarg($path) . ' - 2>/dev/null');
+    // -layout zachova stlpce, ktore ma vacsina zivotopisov
+    $prikaz = [$bin, '-enc', 'UTF-8', '-layout', '-q', $path, '-'];
+    $popis  = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
 
-        // strlen, nie mb_strlen: na neplatnom UTF-8 by mb_strlen mohlo vratit 0
-        // a dobry vysledok by sa zahodil.
-        if (is_string($out) && strlen(trim($out)) > 20) return $out;
-    }
+    $proces = @proc_open($prikaz, $popis, $rury);
+    if (!is_resource($proces)) return null;
+
+    $text = stream_get_contents($rury[1]);
+    fclose($rury[1]);
+    fclose($rury[2]);          // stderr nezaujima, ale rura sa musi zavriet
+    $kod = proc_close($proces);
+
+    // strlen, nie mb_strlen: na neplatnom UTF-8 by mb_strlen mohlo vratit 0
+    // a dobry vysledok by sa zahodil.
+    if ($kod === 0 && is_string($text) && strlen(trim($text)) > 20) return $text;
+
     return null;
 }
 
