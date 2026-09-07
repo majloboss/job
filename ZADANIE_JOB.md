@@ -16,9 +16,11 @@ Legenda stavov: ✅ = v produkcii (main) | 🟠 = iba develop | 🔲 = TODO
 - Evidovať **čas zverejnenia** na portáli aj **čas pridania do našej DB**.
 - Viesť číselníky: zdrojové portály, firmy (s rozlíšením **agentúra vs. priamy
   zamestnávateľ**), profesie, jazyky a úrovne, lokality.
-- Každý používateľ má svoje **preferencie** (profesia, lokalita, typ práce, náplň práce)
-  a ku každému inzerátu **vypočítanú vhodnosť** so stručným popisom a **vzdialenosťou
-  od jeho lokality**.
+- Používateľ **nahrá životopis a ďalšie dokumenty** do aplikácie.
+- Používateľ zadá **preferencie ako voľný text** — vlastnými slovami, čo hľadá.
+- Vhodnosť každého inzerátu posúdi **jazykový model cez OpenRouter**: dostane preferencie,
+  životopis a inzerát, vráti skóre, stručný popis a argumenty pre/proti.
+- Ku každému inzerátu sa eviduje **vzdialenosť od lokality používateľa**.
 - Každých X minút sa dotiahnu nové inzeráty a rovno sa im vypočíta vhodnosť.
 - **Ručné spustenie** vybraného portálu za zvolené obdobie — dotiahne to, čo ešte nemáme.
 - Notifikácie na nové vhodné ponuky (web push / e-mail) a webové UI (React PWA).
@@ -33,6 +35,7 @@ Legenda stavov: ✅ = v produkcii (main) | 🟠 = iba develop | 🔲 = TODO
 | Frontend | React 19 + Vite + `vite-plugin-pwa`, react-router |
 | Scraper | Python 3 (requests + BeautifulSoup / lxml), zápis priamo do DB |
 | Cron | `api/cron/*.php` + Python scraper spúšťaný z cronu |
+| Posudzovanie | OpenRouter (bezplatné modely), výber modelu cez laboratórium |
 | Notifikácie | Web Push (VAPID) + e-mail (rovnaký `mailer.php`) |
 | Hosting | job.fellow.sk (prod) / devjob.fellow.sk (develop) |
 
@@ -183,6 +186,61 @@ verzie skórovania (riadky so starším `scorer_version`).
 Prvá verzia je **pravidlová** (`scored_by='rules'`) — vychádza zo skórovania, ktoré už je
 funkčné v `agent_brigady/codes/build_data_*.py`. Neskôr voliteľne LLM (`scored_by='llm'`).
 
+## 5b. Dokumenty a AI posudzovanie
+
+Podrobne: [docs/AI_POSUDZOVANIE.md](docs/AI_POSUDZOVANIE.md) —
+migrácia: [api/migrations/002_documents_ai.sql](api/migrations/002_documents_ai.sql)
+
+### Dokumenty používateľa
+
+| Tabuľka | Účel |
+|---|---|
+| `job.user_documents` | CV a ďalšie dokumenty — súbor na disku, v DB metadata + **vyťažený text** |
+
+Podporované: PDF, DOCX, DOC, ODT, RTF, TXT, JPG, PNG (max 10 MB). Typy: `cv`,
+`cover_letter`, `certificate`, `reference`, `portfolio`, `other`. Hlavný dokument
+(`is_primary`) je práve jeden na typ. Vyťaženie textu je bez externých knižníc
+(hosting ich nemá) — DOCX/ODT cez `ZipArchive`, PDF cez `pdftotext` alebo vlastný
+extraktor. Zo skenu sa text nevyťaží; dokument sa uloží, ale do promptu nejde.
+
+### Preferencie ako voľný text
+
+`job.user_preferences.free_text` — používateľ napíše vlastnými slovami, čo hľadá.
+Model rozumie aj negáciám a odtieňom, ktoré by sa do formulára nezmestili.
+Štruktúrované polia ostávajú ako **voliteľný doplnok** na rýchle SQL predfiltrovanie
+(neposielať do modelu ponuky 300 km ďaleko).
+
+Zmena voľného textu zmaže doterajšie `job.user_offer_match` — posudky sa prepočítajú.
+
+### AI posudzovanie
+
+| Tabuľka | Účel |
+|---|---|
+| `job.ai_models` | číselník modelov na OpenRouteri + štatistika úspešnosti |
+| `job.ai_prompts` | verziované prompty, práve jedna aktívna verzia od typu |
+| `job.ai_evaluations` | výsledok posúdenia inzerátu modelom (skóre, pre/proti, tokeny) |
+| `job.ai_lab_runs` | beh laboratória: jedna URL posúdená N modelmi |
+
+Model dostane **preferencie + životopis + inzerát** a vráti JSON: skóre 0–100, zaradenie,
+zhrnutie, argumenty pre/proti, chýbajúce zručnosti a **rozparsované údaje o inzeráte**
+(profesia, mzda, jazyky, úväzok, agentúra). Parsovanie robí zámerne model — zorientuje sa
+aj keď portál zmení štruktúru stránky.
+
+### Laboratórium modelov
+
+Obrazovka na porovnanie: zadáš URL inzerátu, vyberieš bezplatné modely a spustíš.
+Ktoré modely sú zadarmo sa v čase mení, preto sa zoznam ťahá naživo z OpenRoutera.
+
+Modely sa volajú **postupne, po jednom** — bezplatné majú limit požiadaviek za minútu
+a paralelné volanie by skončilo na HTTP 429.
+
+Tabuľka ukazuje skóre, **odchýlku od mediánu ostatných modelov**, zaradenie, zhrnutie,
+tokeny a čas. Odchýlka je hlavné kritérium: model do 5 bodov od mediánu hodnotí ako
+ostatné. Riadok sa dá rozkliknúť na detail (pre/proti, chýbajúce zručnosti, vyťažené údaje).
+
+Víťaza zapíšeš do `api/config/openrouter.php` ako `OPENROUTER_MODEL`.
+
+
 ## 6. API endpointy (návrh)
 
 ```
@@ -193,14 +251,22 @@ GET    /api/v1/profile                 profil používateľa
 GET    /api/v1/offers                  zoznam ponúk (filtre, stránkovanie)
 GET    /api/v1/offers/{id}             detail ponuky
 POST   /api/v1/offers/{id}/status      označiť uložená/skrytá/reagoval som
-GET    /api/v1/preferences             moje preferencie (profesia, lokalita, typ, náplň)
-PUT    /api/v1/preferences             uložiť preferencie -> spustí prepočet vhodnosti
+GET    /api/v1/preferences             moje preferencie (voľný text + doplnky)
+PUT    /api/v1/preferences             uložiť preferencie -> vyžiada prepočet vhodnosti
+GET    /api/v1/documents               moje dokumenty (CV a ďalšie)
+POST   /api/v1/documents               nahratie dokumentu (multipart, pole: file)
+PATCH  /api/v1/documents               úprava metadát { id, title, doc_type, is_primary }
+DELETE /api/v1/documents?id=5          zmazanie dokumentu
 GET    /api/v1/matches                 moje ponuky zoradené podľa vhodnosti
 GET    /api/v1/codebooks/{ciselnik}    professions | languages | locations | tags | sources
 GET    /api/v1/admin/scrape-runs       admin: história behov zberu
 POST   /api/v1/admin/scrape-run        admin: manuálne spustenie {source_id, period_days}
 GET    /api/v1/admin/sources           admin: správa portálov a intervalov
 PUT    /api/v1/admin/companies/{id}    admin: označiť firmu ako agentúru
+GET    /api/v1/admin/ai-models         zoznam bezplatných modelov na OpenRouteri
+POST   /api/v1/admin/ai-lab            laboratórium: založiť beh { url, models, document_id }
+POST   /api/v1/admin/ai-lab?step=1     laboratórium: otestovať jeden model { run_id, model }
+GET    /api/v1/admin/ai-lab?run_id=5   laboratórium: výsledky behu
 ```
 
 ## 7. Fázy realizácie
@@ -208,13 +274,14 @@ PUT    /api/v1/admin/companies/{id}    admin: označiť firmu ako agentúru
 | # | Fáza | Stav |
 |---|---|---|
 | 1 | Založenie projektu, DB schéma `admin` + `job`, migrácia 001 | 🟠 |
+| 1b | Dokumenty (CV) + AI posudzovanie + laboratórium modelov, migrácia 002 | 🟠 |
 | 2 | Naplnenie číselníkov (lokality SK s GPS, profesie, mapovania portálov) | 🔲 |
 | 3 | Python scraper profesia.sk — zoznamy + detaily + HTML do `offer_content` | 🔲 |
 | 4 | Detekcia jazyka + preklad EN→SK do `offer_content` | 🔲 |
 | 5 | Cron + `job.scrape_runs`, deaktivácia zmiznutých ponúk | 🔲 |
 | 6 | Manuálne spustenie zberu (portál + obdobie) | 🔲 |
 | 7 | PHP API: auth (prevzatý z BetClub) + `/offers` + `/codebooks` | 🔲 |
-| 8 | Preferencie + výpočet vhodnosti (`user_offer_match`) + vzdialenosť | 🔲 |
+| 8 | Napojenie posudzovania na zber: nové inzeráty -> `user_offer_match` | 🔲 |
 | 9 | React PWA: login, zoznam ponúk podľa vhodnosti, detail, preferencie | 🔲 |
 | 10 | Notifikácie (web push + e-mail) na nové vhodné ponuky | 🔲 |
 | 11 | Admin sekcia (portály, behy zberu, firmy/agentúry, používatelia) | 🔲 |

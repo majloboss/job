@@ -1,10 +1,14 @@
-# konfiguracia s heslami
+# konfiguracia s heslami a klucmi
 api/config/db.php
 api/config/mail.php
 api/config/vapid.php
 api/config/openrouter.php
 .env
 *.env
+
+# nahrate dokumenty pouzivatelov (CV) - nepatria do repa
+api/uploads/
+uploads/
 
 # Python
 __pycache__/
