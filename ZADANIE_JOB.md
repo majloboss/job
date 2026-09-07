@@ -11,13 +11,17 @@ Legenda stavov: ✅ = v produkcii (main) | 🟠 = iba develop | 🔲 = TODO
 ## 1. Cieľ
 
 - V pravidelných intervaloch (cron) sťahovať pracovné inzeráty z profesia.sk.
-- Ukladať ich do PostgreSQL — s históriou, dedupláciou a detekciou zmien.
-- Umožniť používateľom definovať si **vlastné vyhľadávacie profily** (lokalita, kľúčové
-  slová, typ úväzku, mzda) a dostávať **notifikácie na nové ponuky** (web push / e-mail).
-- Poskytnúť webové UI (React PWA) na prehliadanie, filtrovanie, označovanie ponúk
-  (uložené / nezaujíma ma / reagoval som).
-- Voliteľne: automatické **skórovanie vhodnosti** ponuky voči profilu používateľa
-  (pravidlové skórovanie ako v `agent_brigady`, neskôr LLM cez OpenRouter).
+- Ukladať **komplet inzerát v HTML tak, ako bol na zdroji**; ak nie je po slovensky,
+  doplniť aj **preloženú slovenskú verziu** (originál sa nikdy neprepisuje).
+- Evidovať **čas zverejnenia** na portáli aj **čas pridania do našej DB**.
+- Viesť číselníky: zdrojové portály, firmy (s rozlíšením **agentúra vs. priamy
+  zamestnávateľ**), profesie, jazyky a úrovne, lokality.
+- Každý používateľ má svoje **preferencie** (profesia, lokalita, typ práce, náplň práce)
+  a ku každému inzerátu **vypočítanú vhodnosť** so stručným popisom a **vzdialenosťou
+  od jeho lokality**.
+- Každých X minút sa dotiahnu nové inzeráty a rovno sa im vypočíta vhodnosť.
+- **Ručné spustenie** vybraného portálu za zvolené obdobie — dotiahne to, čo ešte nemáme.
+- Notifikácie na nové vhodné ponuky (web push / e-mail) a webové UI (React PWA).
 
 ## 2. Technologický stack (zhodný s BetClub)
 
@@ -63,14 +67,22 @@ voľných miest.
 - Každý beh = jeden riadok v `job.scrape_runs` (počty: nájdené / nové / aktualizované / chyby).
 - Ponuka, ktorá v N po sebe idúcich behoch nie je v zozname, sa označí `is_active = FALSE`
   a nastaví `closed_at` (netreba mazať — držíme históriu).
-- Surové HTML/JSON detailu sa ukladá do `job.offer_raw` kvôli re-parsovaniu bez
-  opätovného sťahovania.
+- Komplet HTML detailu sa ukladá do `job.offer_content` (`is_original = TRUE`) — slúži
+  zároveň ako archív pre re-parsovanie bez opätovného sťahovania.
+- Po stiahnutí detailu sa deteguje jazyk; ak nie je slovenský, zaradí sa do fronty na
+  preklad (`translated_at IS NULL`).
 
-### 3.5 Interval
+### 3.5 Interval a ručné spustenie
 
 - Default: **každé 2 hodiny** medzi 06:00 a 22:00 (SK čas), zoznamy s `count_days=1`.
 - Raz denne v noci: „full sync" s `count_days=7` na doplnenie toho, čo uniklo.
-- Interval je konfigurovateľný per zdroj v `job.sources.scrape_interval_minutes`.
+- Interval je konfigurovateľný per zdroj v `job.sources.scrape_interval_minutes`,
+  východiskové obdobie v `job.sources.default_period_days`.
+- **Ručné spustenie:** používateľ v admin sekcii vyberie **portál** a **obdobie v dňoch**;
+  beh sa zapíše ako `run_type = 'manual'` s `period_days` a `triggered_by = user_id`.
+  Stiahne sa len to, čo v DB ešte nie je (podľa `source_id + external_id`), plus detaily
+  inzerátov s `detail_fetched_at IS NULL`.
+- Po každom zbere sa pre nové inzeráty prepočíta `job.user_offer_match`.
 
 ## 4. User manažment (prevzatý z BetClub)
 
@@ -84,28 +96,92 @@ Schéma **`admin.*` sa preberá 1:1** z `betclub/api/migrations/001_init.sql` a 
 - `admin.notification_settings` — per user, per typ notifikácie (push/e-mail)
 - `admin.user_push_subscriptions` — viac zariadení na používateľa
 
+**Rozšírenie oproti BetClub:** `admin.users` má navyše `home_location_id` a voliteľne presné
+`home_lat`/`home_lon` — domovskú lokalitu, od ktorej sa počíta vzdialenosť k ponukám.
+
 **Nepreberá sa:** `admin.friend_groups` / `admin.group_members` (tipovacie skupiny nemajú
 v JOB zmysel). Ak by v budúcnosti vznikli „zdieľané zoznamy ponúk", dajú sa doplniť.
 
-## 5. Dátový model — prehľad tabuliek (schéma `job`)
+## 5. Dátový model
+
+Detailný popis: [docs/DATOVY_MODEL.md](docs/DATOVY_MODEL.md) — DDL: [api/migrations/001_init.sql](api/migrations/001_init.sql)
+
+### Číselníky
 
 | Tabuľka | Účel |
 |---|---|
-| `job.sources` | číselník portálov (profesia.sk, pracazarohom.sk, …) + interval |
-| `job.companies` | zamestnávatelia (deduplikované podľa názvu + slug) |
-| `job.locations` | číselník lokalít (obec, okres, kraj, GPS) |
-| `job.offers` | hlavná tabuľka inzerátov |
-| `job.offer_locations` | M:N — ponuka môže mať viac miest výkonu |
-| `job.offer_raw` | surové HTML/JSON detailu (archív pre re-parsing) |
+| `job.sources` | zdrojové portály + interval zberu + rate limit |
+| `job.companies` | firmy ponúkajúce prácu, vrátane príznaku **agentúra** (`is_agency`) |
+| `job.company_aliases` | názov tej istej firmy na rôznych portáloch |
+| `job.professions` | hierarchický číselník profesií (odbor → profesia) |
+| `job.profession_mappings` | mapovanie textu odboru z portálu na našu profesiu |
+| `job.languages` | číselník jazykov (ISO 639-1) |
+| `job.language_levels` | úrovne A1–C2 s poradím na porovnávanie |
+| `job.locations` | lokality (obec/okres/kraj/krajina) vrátane GPS |
+| `job.tags` | štítky ponuky (home office, na zmeny, bez životopisu…) |
+
+### Inzeráty
+
+| Tabuľka | Účel |
+|---|---|
+| `job.offers` | hlavná tabuľka — mzda, typ úväzku, časy, stav zberu |
+| `job.offer_content` | **komplet HTML inzerátu ako na zdroji + slovenský preklad** (riadok na jazyk) |
+| `job.offer_locations` | M:N miesta výkonu práce |
+| `job.offer_languages` | jazykové požiadavky inzerátu (jazyk + úroveň + povinný/výhodou) |
+| `job.offer_tags` | štítky |
 | `job.offer_history` | zmeny sledovaných polí v čase (mzda, titul, stav) |
-| `job.tags` + `job.offer_tags` | štítky (home office, bez životopisu, TPP, dohoda…) |
-| `job.scrape_runs` | log každého behu scrapera |
-| `job.search_profiles` | vyhľadávacie profily používateľa |
-| `job.profile_matches` | výsledky matchovania ponuka × profil vrátane skóre |
-| `job.user_offer_status` | osobný stav ponuky (uložená / skryté / reagoval som) |
+
+**Originál sa nikdy neprepisuje.** Ak je inzerát v angličtine, pribudne druhý riadok
+`job.offer_content` s `lang='sk'` — preklad sa dá kedykoľvek pregenerovať lepším modelom.
+Pohľad `job.v_offers_sk` vráti pre zobrazenie slovenskú verziu, ak existuje, inak originál.
+
+**Časy:** `published_at` = zverejnenie na portáli, `created_at` = pridanie do našej DB,
+`last_seen_at` = posledné videnie v zoznamoch, `closed_at` = kedy ponuka zmizla.
+
+### Scraping
+
+| Tabuľka | Účel |
+|---|---|
+| `job.scrape_runs` | log každého behu: typ, obdobie v dňoch, počítadlá, kto spustil |
+| `job.scrape_run_offers` | ktorý beh videl ktorý inzerát (`new`/`updated`/`seen`) |
+
+### Používateľ: preferencie a vhodnosť
+
+| Tabuľka | Účel |
+|---|---|
+| `job.user_preferences` | typ práce, mzda, max. dojazd, agentúry áno/nie, **náplň práce** (voľný text) |
+| `job.user_pref_professions` | preferované / nechcené profesie (váha, záporná = nechcem) |
+| `job.user_pref_locations` | preferované lokality s vlastným polomerom |
+| `job.user_pref_languages` | jazyky, ktoré používateľ ovláda, s úrovňou |
+| `job.user_pref_keywords` | kľúčové slová náplne práce (záporná váha = vylučujúce) |
+| `job.user_offer_match` | **vypočítaná vhodnosť** — skóre, krátky popis, dôvody, vzdialenosť |
+| `job.user_offer_status` | ručná akcia usera (uložené / skryté / reagoval som / pohovor) |
 | `job.notification_log` | čo, komu a kedy bolo odoslané |
 
-Detailné DDL: [api/migrations/001_init.sql](api/migrations/001_init.sql)
+`admin.users` je rozšírená o `home_location_id` + `home_lat`/`home_lon` — domovskú lokalitu,
+od ktorej sa počíta vzdialenosť.
+
+### Funkcie
+
+- `job.distance_km(lat1, lon1, lat2, lon2)` — Haversine, vzdialenosť v km
+- `job.offer_distance_km(user_id, offer_id)` — najbližšie miesto výkonu od bydliska usera
+- pohľad `job.v_offers_sk` — inzerát s obsahom v slovenčine (preklad, inak originál)
+
+## 5a. Výpočet vhodnosti
+
+Po každom zbere sa pre nové inzeráty vypočíta `job.user_offer_match` pre všetkých aktívnych
+používateľov. Skóre 0–100, rozdelené do `vhodne` / `menej_vhodne` / `nevhodne`, s krátkym
+popisom (`summary`) a rozpadom dôvodov (`reasons` ako JSON).
+
+Vstupy do skóre: zhoda profesie, vzdialenosť vs. `max_distance_km`, typ úväzku, mzda voči
+`salary_min`, jazykové požiadavky vs. znalosti usera, kľúčové slová náplne práce, penalizácia
+za agentúru.
+
+Prepočet sa spustí aj pri zmene preferencií (len pre daného usera) a pri nasadení novej
+verzie skórovania (riadky so starším `scorer_version`).
+
+Prvá verzia je **pravidlová** (`scored_by='rules'`) — vychádza zo skórovania, ktoré už je
+funkčné v `agent_brigady/codes/build_data_*.py`. Neskôr voliteľne LLM (`scored_by='llm'`).
 
 ## 6. API endpointy (návrh)
 
@@ -117,29 +193,32 @@ GET    /api/v1/profile                 profil používateľa
 GET    /api/v1/offers                  zoznam ponúk (filtre, stránkovanie)
 GET    /api/v1/offers/{id}             detail ponuky
 POST   /api/v1/offers/{id}/status      označiť uložená/skrytá/reagoval som
-GET    /api/v1/search-profiles         moje vyhľadávacie profily
-POST   /api/v1/search-profiles         vytvoriť profil
-PUT    /api/v1/search-profiles/{id}    upraviť
-DELETE /api/v1/search-profiles/{id}    zmazať
-GET    /api/v1/matches                 nové ponuky zodpovedajúce mojim profilom
-GET    /api/v1/admin/scrape-runs       admin: história behov scrapera
-POST   /api/v1/admin/scrape-run        admin: manuálne spustenie zberu
-GET    /api/v1/admin/sources           admin: správa zdrojov a intervalov
+GET    /api/v1/preferences             moje preferencie (profesia, lokalita, typ, náplň)
+PUT    /api/v1/preferences             uložiť preferencie -> spustí prepočet vhodnosti
+GET    /api/v1/matches                 moje ponuky zoradené podľa vhodnosti
+GET    /api/v1/codebooks/{ciselnik}    professions | languages | locations | tags | sources
+GET    /api/v1/admin/scrape-runs       admin: história behov zberu
+POST   /api/v1/admin/scrape-run        admin: manuálne spustenie {source_id, period_days}
+GET    /api/v1/admin/sources           admin: správa portálov a intervalov
+PUT    /api/v1/admin/companies/{id}    admin: označiť firmu ako agentúru
 ```
 
 ## 7. Fázy realizácie
 
 | # | Fáza | Stav |
 |---|---|---|
-| 1 | Založenie projektu, DB schéma `admin` + `job`, migrácia 001 | 🔲 |
-| 2 | Python scraper profesia.sk — zoznamy + detaily, zápis do DB | 🔲 |
-| 3 | Cron + `job.scrape_runs`, deaktivácia zmiznutých ponúk | 🔲 |
-| 4 | PHP API: auth (prevzatý z BetClub) + `/offers` | 🔲 |
-| 5 | React PWA: login, zoznam ponúk, filtre, detail | 🔲 |
-| 6 | Vyhľadávacie profily + matchovanie + skórovanie | 🔲 |
-| 7 | Notifikácie (web push + e-mail) na nové zhody | 🔲 |
-| 8 | Admin sekcia (zdroje, behy scrapera, používatelia) | 🔲 |
-| 9 | Ďalšie portály (pracazarohom.sk, kariera.sk, …) | 🔲 |
+| 1 | Založenie projektu, DB schéma `admin` + `job`, migrácia 001 | 🟠 |
+| 2 | Naplnenie číselníkov (lokality SK s GPS, profesie, mapovania portálov) | 🔲 |
+| 3 | Python scraper profesia.sk — zoznamy + detaily + HTML do `offer_content` | 🔲 |
+| 4 | Detekcia jazyka + preklad EN→SK do `offer_content` | 🔲 |
+| 5 | Cron + `job.scrape_runs`, deaktivácia zmiznutých ponúk | 🔲 |
+| 6 | Manuálne spustenie zberu (portál + obdobie) | 🔲 |
+| 7 | PHP API: auth (prevzatý z BetClub) + `/offers` + `/codebooks` | 🔲 |
+| 8 | Preferencie + výpočet vhodnosti (`user_offer_match`) + vzdialenosť | 🔲 |
+| 9 | React PWA: login, zoznam ponúk podľa vhodnosti, detail, preferencie | 🔲 |
+| 10 | Notifikácie (web push + e-mail) na nové vhodné ponuky | 🔲 |
+| 11 | Admin sekcia (portály, behy zberu, firmy/agentúry, používatelia) | 🔲 |
+| 12 | Ďalšie portály (pracazarohom.sk, kariera.sk, …) | 🔲 |
 
 ## 8. Právne a etické poznámky
 
