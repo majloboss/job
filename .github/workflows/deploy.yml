@@ -111,3 +111,4 @@ jobs:
             **/config/openrouter.php
             **/config/mail.php
             uploads/**
+            setup_once.php
