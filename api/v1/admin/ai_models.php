@@ -27,7 +27,20 @@ foreach ($free as &$m) {
     $m['avg_ms']     = $s && $s['avg_ms'] !== null ? (int)$s['avg_ms'] : null;
     $m['is_enabled'] = $s ? in_array($s['is_enabled'], [true,'t','1',1], true) : true;
     $m['is_default'] = $s ? in_array($s['is_default'], [true,'t','1',1], true) : false;
+    // Dovod vyradenia — frontend ho ukaze pri zasedivenom modeli.
+    $m['last_error'] = $s['last_error'] ?? null;
 }
 unset($m);
 
-json_ok(['models' => $free, 'count' => count($free)]);
+// Pouzitelne modely idu hore; medzi nimi rozhoduje velkost kontextu
+// (zoradenie z or_free_models zostava zachovane).
+usort($free, fn($a, $b) => ($b['is_enabled'] <=> $a['is_enabled'])
+                        ?: (($b['context'] ?? 0) <=> ($a['context'] ?? 0)));
+
+$pouzitelnych = count(array_filter($free, fn($m) => $m['is_enabled']));
+
+json_ok([
+    'models'       => $free,
+    'count'        => count($free),
+    'pouzitelnych' => $pouzitelnych,
+]);

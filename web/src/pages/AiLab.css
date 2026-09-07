@@ -109,6 +109,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Model, ktory uz raz vratil trvalu chybu — necha sa vybrat, ale predvolene
+   zaskrtnuty nie je a namiesto id ukazuje dovod vyradenia. */
+.lab-zoznam li.vyradeny .lab-model-nazov {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.lab-zoznam li.vyradeny .lab-model-id {
+  color: var(--warn);
+  text-decoration: none;
+  white-space: normal;
+}
+
 @media (min-width: 700px) {
   .lab-akcie button { flex: 0 0 auto; }
   .lab-model-id { font-size: 12px; }

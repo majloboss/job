@@ -37,7 +37,10 @@ export default function AiLab() {
     try {
       const r = await api('/v1/admin/ai-models');
       setModels(r.models);
-      setSelected(new Set(r.models.map(m => m.id)));   // vsetky = zmysel porovnania
+      // Zaskrtnu sa len pouzitelne. Vyradene su tie, ktore uz raz vratili
+      // trvalu chybu (napr. dostupne len agentickym nastrojom) — nema zmysel
+      // cakat na ne pri kazdom behu.
+      setSelected(new Set(r.models.filter(m => m.is_enabled).map(m => m.id)));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -167,15 +170,20 @@ export default function AiLab() {
           aria-expanded={zoznamOtvoreny}
         >
           <span>Bezplatné modely</span>
-          <span className="lab-pocet">{selected.size} / {models.length}</span>
+          <span className="lab-pocet">
+            {selected.size} / {models.filter(m => m.is_enabled).length}
+            {models.some(m => !m.is_enabled) &&
+              ` · ${models.filter(m => !m.is_enabled).length} nepoužiteľných`}
+          </span>
           <span className={'lab-sipka' + (zoznamOtvoreny ? ' hore' : '')} aria-hidden="true" />
         </button>
 
         {zoznamOtvoreny && (
           <div className="lab-modely-obsah">
             <div className="lab-akcie">
-              <button type="button" onClick={() => setSelected(new Set(models.map(m => m.id)))}
-                      disabled={running}>Všetky</button>
+              <button type="button"
+                      onClick={() => setSelected(new Set(models.filter(m => m.is_enabled).map(m => m.id)))}
+                      disabled={running}>Použiteľné</button>
               <button type="button" onClick={() => setSelected(new Set())}
                       disabled={running}>Žiadny</button>
               <button type="button" onClick={loadModels} disabled={running || loading}>
@@ -187,13 +195,15 @@ export default function AiLab() {
 
             <ul className="lab-zoznam">
               {models.map(m => (
-                <li key={m.id}>
+                <li key={m.id} className={m.is_enabled ? '' : 'vyradeny'}>
                   <label>
                     <input type="checkbox" checked={selected.has(m.id)}
                            onChange={() => toggle(m.id)} disabled={running} />
                     <span className="lab-model-info">
                       <span className="lab-model-nazov">{m.name}</span>
-                      <span className="lab-model-id">{m.id}</span>
+                      <span className="lab-model-id">
+                        {m.is_enabled ? m.id : (m.last_error || 'Nepoužiteľný')}
+                      </span>
                     </span>
                     {m.lab_runs > 0 && (
                       <span className="lab-model-stat" title="úspešné behy / celkom">

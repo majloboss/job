@@ -254,12 +254,24 @@ function or_evaluate(array $ctx, string $model): array {
         $res['took_ms'],
     ]);
 
+    // Modely, ktore nikdy nebudu fungovat, sa vyradia zo zoznamu — aby
+    // nezdrzovali kazdy dalsi beh. Tyka sa to len trvalych prekazok, nie
+    // docasnych (limit poziadaviek, vypadok siete).
+    $trvale = or_trvalo_nedostupny($res['error']);
+    if ($trvale !== null) {
+        db()->prepare(
+            'UPDATE job.ai_models
+                SET is_enabled = FALSE, last_error = ?, updated_at = NOW()
+              WHERE model_id = ?')->execute([$trvale, $model]);
+    }
+
     return [
         'id'      => (int)$st->fetchColumn(),
         'model'   => $model,
         'ok'      => $res['status'] === 'ok' && $score !== null,
         'status'  => $res['status'],
         'error'   => $res['error'],
+        'vyradeny' => $trvale !== null,
         'score'   => $score,
         'bucket'  => $bucket,
         'summary' => $d['summary'] ?? null,
@@ -270,6 +282,29 @@ function or_evaluate(array $ctx, string $model): array {
         'tokens'  => $res['usage']['total_tokens'] ?? null,
         'ms'      => $res['took_ms'],
     ];
+}
+
+// Je chyba trvala, teda nema zmysel model skusat znova?
+//
+// Vracia zrozumitelny dovod, alebo null pri docasnej chybe. Rozlisenie je
+// podstatne: limit poziadaviek za minutu alebo vypadok siete prejde, kdezto
+// model dostupny len agentickym nastrojom nebude fungovat nikdy.
+function or_trvalo_nedostupny(?string $chyba): ?string {
+    if ($chyba === null || $chyba === '') return null;
+    $c = mb_strtolower($chyba);
+
+    $trvale = [
+        'agentic harness'      => 'Model je dostupný len agentickým nástrojom, nie cez API',
+        'no endpoints found'   => 'Model nemá dostupný endpoint',
+        'is not a valid model' => 'Model už neexistuje',
+        'unavailable for free' => 'Model už nie je bezplatný',
+        'requires more credits'=> 'Model vyžaduje kredit',
+        'data policy'          => 'Model blokuje nastavenie ochrany údajov na účte',
+    ];
+    foreach ($trvale as $vzor => $popis) {
+        if (str_contains($c, $vzor)) return $popis;
+    }
+    return null;
 }
 
 // Prepocita suhrnnu statistiku modelu v ciselniku.
