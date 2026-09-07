@@ -2,6 +2,11 @@
 # Bez toho by /lab alebo /dokumenty vratili 404 pri priamom otvoreni alebo F5.
 #
 # /api/ je vynimka — tu obsluhuje PHP a ma vlastny .htaccess.
+
+# MultiViews vypnute: s nim Apache doplna pripony sam a moze podat subor,
+# ktory mal obsluzit router.
+Options -MultiViews
+
 RewriteEngine On
 RewriteBase /
 

@@ -1,8 +1,23 @@
-# Vsetky poziadavky na /api/* obsluhuje index.php (router), okrem existujucich
-# suborov — health.php a setup_once.php sa volaju priamo.
+# Vsetky poziadavky na /api/* obsluhuje index.php (router).
+#
+# MultiViews MUSI byt vypnute: s nim Apache pri poziadavke na /v1/auth/login
+# sam najde subor login.php, poda ho ako STATICKY TEXT (zdrojak PHP!) a
+# prepisovacie pravidla sa vobec neuplatnia.
+Options -MultiViews
+
 RewriteEngine On
 
+# Priamo volane skripty (health.php, setup_once.php) sa vykonaju samy —
+# podmienka plati len na skutocne existujuci subor s priponou .php.
+RewriteCond %{REQUEST_URI} \.php$
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]
 
+# Staticke subory (obrazky a pod.), ak by tu nejake boli.
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteCond %{REQUEST_URI} !\.php$
+RewriteCond %{REQUEST_URI} \.(png|jpe?g|gif|svg|ico|css|js|woff2?)$
+RewriteRule ^ - [L]
+
+# Vsetko ostatne ide na router.
 RewriteRule ^(.*)$ index.php [QSA,L]
