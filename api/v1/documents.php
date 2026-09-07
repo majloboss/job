@@ -14,7 +14,10 @@ require_once __DIR__ . '/../helpers/doc_text.php';
 
 $pdo = db();
 $uid = $auth['user_id'];
-$dir = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'uploads'
+// api/uploads/documents/ — teda VNUTRI api/, kde plati .htaccess so zakazom
+// priameho stiahnutia. dirname(__DIR__, 2) by ukazalo o uroven vyssie, do
+// korena webu, odkial by boli zivotopisy verejne dostupne cez URL.
+$dir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'uploads'
      . DIRECTORY_SEPARATOR . 'documents' . DIRECTORY_SEPARATOR;
 
 const DOC_TYPES = ['cv', 'cover_letter', 'certificate', 'reference', 'portfolio', 'other'];
