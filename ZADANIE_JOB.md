@@ -38,6 +38,10 @@ Legenda stavov: ✅ = v produkcii (main) | 🟠 = iba develop | 🔲 = TODO
 | Posudzovanie | OpenRouter (bezplatné modely), výber modelu cez laboratórium |
 | Notifikácie | Web Push (VAPID) + e-mail (rovnaký `mailer.php`) |
 | Hosting | job.fellow.sk (prod) / devjob.fellow.sk (develop) |
+| Databázy | DB-JOB (prod) / DB-JOB-DEV (develop), PostgreSQL |
+| Deploy | GitHub Actions -> FTP, jediný secret `FTP_PASSWORD` |
+
+Postup nasadenia: [docs/NASADENIE.md](docs/NASADENIE.md)
 
 ## 3. Zber dát z profesia.sk
 
@@ -275,6 +279,7 @@ GET    /api/v1/admin/ai-lab?run_id=5   laboratórium: výsledky behu
 |---|---|---|
 | 1 | Založenie projektu, DB schéma `admin` + `job`, migrácia 001 | 🟠 |
 | 1b | Dokumenty (CV) + AI posudzovanie + laboratórium modelov, migrácia 002 | 🟠 |
+| 1c | Hosting, databázy, deploy workflow, prvý admin | 🟠 |
 | 2 | Naplnenie číselníkov (lokality SK s GPS, profesie, mapovania portálov) | 🔲 |
 | 3 | Python scraper profesia.sk — zoznamy + detaily + HTML do `offer_content` | 🔲 |
 | 4 | Detekcia jazyka + preklad EN→SK do `offer_content` | 🔲 |
