@@ -326,6 +326,14 @@ function or_trvalo_nedostupny(?string $chyba): ?string {
     if ($chyba === null || $chyba === '') return null;
     $c = mb_strtolower($chyba);
 
+    // Docasne prekazky maju prednost: poskytovatel vracia pri vycerpanom
+    // dennom limite aj hlasky, ktore inak vyzeraju ako trvale. Model, ktory
+    // zajtra pobezi, sa nesmie vyradit natrvalo.
+    foreach (['rate limit', 'rate-limited', 'temporarily', 'overloaded',
+              'try again', 'retry', 'timeout', 'resourceexhausted'] as $docasne) {
+        if (str_contains($c, $docasne)) return null;
+    }
+
     $trvale = [
         'agentic harness'      => 'Model je dostupný len agentickým nástrojom, nie cez API',
         'no endpoints found'   => 'Model nemá dostupný endpoint',

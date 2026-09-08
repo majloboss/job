@@ -46,29 +46,27 @@ if ($vstup === 0) {
 $cennik = or_cennik();
 if (!$cennik) json_error('Cenník z OpenRoutera sa nepodarilo načítať', 502);
 
-// Vyber modelov na porovnanie — zname a bezne pouzivane.
+// Porovnavaju sa PRESNE tieto modely — jeden lacny, jeden stredny a jeden
+// silny od kazdeho vyrobcu. Zoznam je zamerne kratky: cennik ma stovky
+// poloziek a varianty (:batch, -codex, -image) by prehlad len zahltili.
 $zaujimave = [
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-sonnet-5',
     'anthropic/claude-opus-5',
+    'openai/gpt-5-nano',
     'openai/gpt-5-mini',
     'openai/gpt-5',
-    'google/gemini-3-flash',
+    'google/gemini-3-flash-preview',
     'google/gemini-3-pro',
-    'meta-llama/llama-4-70b-instruct',
+    'deepseek/deepseek-v4-flash',
+    'deepseek/deepseek-v4-pro',
     'mistralai/mistral-large-2512',
-    'deepseek/deepseek-v4',
 ];
 
 $modely = [];
-foreach ($cennik as $id => $c) {
-    // presna zhoda, alebo model zacinajuci na zname meno (verzie sa lisia)
-    $sedi = false;
-    foreach ($zaujimave as $z) {
-        if ($id === $z || str_starts_with($id, $z)) { $sedi = true; break; }
-    }
-    if (!$sedi || $c['vstup'] === null) continue;
-    if (str_ends_with($id, ':free')) continue;
+foreach ($zaujimave as $id) {
+    $c = $cennik[$id] ?? null;
+    if ($c === null || $c['vstup'] === null) continue;
 
     $zaPosudok = $vstup * $c['vstup'] + $vystup * $c['vystup'];
     $modely[$id] = [
