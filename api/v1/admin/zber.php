@@ -52,8 +52,8 @@ if ($method === 'GET') {
         'portaly' => $pdo->query(
             'SELECT id, code, name, default_period_days
                FROM job.sources WHERE is_active ORDER BY name')->fetchAll(),
-        // Bez Pythonu na serveri sa zber musi spustat z prikazoveho riadka.
-        'python'  => zber_najdi_python() !== null,
+        // Bez Pythonu alebo kniznic sa zber musi spustat z prikazoveho riadka.
+        'python'  => zber_najdi_python() !== null && zber_kniznice_su(),
     ]);
 }
 
@@ -77,6 +77,13 @@ function zber_najdi_python(): ?string {
         if (is_executable($c)) return $c;
     }
     return null;
+}
+
+// Su kniznice pre scraper nainstalovane? Bez nich by beh spadol hned
+// po spusteni a v historii by zostal len zaznam s chybou.
+function zber_kniznice_su(): bool {
+    return is_dir(dirname(__DIR__, 2) . '/pylibs/requests')
+        && is_dir(dirname(__DIR__, 2) . '/pylibs/psycopg2');
 }
 
 // ------------------------------------------------------------
@@ -118,6 +125,14 @@ if ($akcia === 'spustit') {
     $runId = (int)$st->fetchColumn();
 
     $python = zber_najdi_python();
+    if ($python !== null && !zber_kniznice_su()) {
+        $pdo->prepare(
+            "UPDATE job.scrape_runs SET status='failed', finished_at=NOW(),
+                    error_message=? WHERE id=?")
+            ->execute(['Chybaju Python kniznice v api/pylibs', $runId]);
+        json_error('Na serveri chýbajú Python knižnice. Doinštaluj ich cez '
+                 . 'POST /v1/admin/diag-python?pip=1', 501);
+    }
     if ($python === null) {
         $pdo->prepare(
             "UPDATE job.scrape_runs
@@ -145,8 +160,19 @@ if ($akcia === 'spustit') {
                '--dni', (string)$dni, '--limit', (string)$limit,
                '--run-id', (string)$runId];
 
+    // PYTHONPATH ukazuje na api/pylibs, kam sa kniznice instaluju.
+    // Bez toho by scraper nenasiel requests ani psycopg2: systemovy Python
+    // ich nema a instalacia cez --user by skoncila v /tmp/.local, ktory sa
+    // pravidelne cisti.
+    $env = [
+        'PYTHONPATH' => dirname(__DIR__, 2) . '/pylibs',
+        'HOME'       => sys_get_temp_dir(),
+        'PATH'       => '/usr/local/bin:/usr/bin:/bin',
+        'LANG'       => 'sk_SK.UTF-8',
+    ];
+
     $popis  = [1 => ['file', $log, 'w'], 2 => ['file', $log, 'a']];
-    $proces = @proc_open($prikaz, $popis, $rury);
+    $proces = @proc_open($prikaz, $popis, $rury, null, $env);
 
     if (!is_resource($proces)) {
         $pdo->prepare("UPDATE job.scrape_runs SET status='failed', finished_at=NOW(),

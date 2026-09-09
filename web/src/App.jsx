@@ -8,6 +8,7 @@ const ODKAZY = [
   { to: '/ponuky',      text: 'Ponuky' },
   { to: '/dokumenty',   text: 'Dokumenty' },
   { to: '/preferencie', text: 'Preferencie' },
+  { to: '/zber',        text: 'Zber',         admin: true },
   { to: '/modely',      text: 'Modely',       admin: true },
   { to: '/naklady',     text: 'Náklady',      admin: true },
   { to: '/lab',         text: 'Laboratórium', admin: true },

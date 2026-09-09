@@ -28,3 +28,6 @@ scraper/out/
 # nahlad favikony (generovany, len na kontrolu)
 nahlad_favicon.png
 tools/openrouter.php
+
+# Python kniznice pre scraper (instaluju sa na serveri cez pip --target)
+api/pylibs/

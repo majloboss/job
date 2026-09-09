@@ -1,0 +1,208 @@
+/* ============================================================
+   Zber inzerátov — ručné spustenie a história behov.
+   Mobile-first; tabuľka histórie sa posúva vo vlastnom obale.
+   ============================================================ */
+
+.zber { padding: 16px; max-width: 1200px; margin: 0 auto; }
+.zber h1 { margin: 0 0 16px; font-size: 22px; }
+.zber h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.zb-chyba, .zb-sprava, .zb-upozornenie {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  margin: 0 0 14px;
+}
+.zb-chyba  { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); }
+.zb-sprava { background: color-mix(in srgb, var(--ok) 12%, transparent);  color: var(--ok); }
+.zb-upozornenie {
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn);
+  font-size: 14px;
+}
+.zb-upozornenie pre {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: var(--panel);
+  border-radius: var(--radius);
+  color: var(--fg);
+  font-size: 13px;
+  overflow-x: auto;
+}
+
+.zb-popis { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+
+/* --- stav databázy --- */
+.zb-stav {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.zb-cislo {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  text-align: center;
+}
+.zb-cislo strong { display: block; font-size: 24px; line-height: 1.2; }
+.zb-cislo span   { font-size: 12px; color: var(--muted); }
+.zb-cislo.caka   { border-color: var(--warn); }
+
+/* --- kroky --- */
+.zb-krok {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+/* Číslo kroku zvýrazňuje, že zber je dvojkrokový. */
+.zb-cislo-kroku {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  flex: none;
+}
+
+.zb-nastavenia {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.zb-nastavenia label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 150px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.zb-nastavenia select {
+  min-height: var(--dotyk);
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+.zb-spustit {
+  min-height: var(--dotyk);
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.zb-spustit:disabled { opacity: .45; cursor: default; }
+
+.zb-caka-info {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.zb-bezi {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--accent);
+}
+/* Jemné pulzovanie: beh trvá minúty a treba vidieť, že sa niečo deje. */
+.zb-bezi::before {
+  content: '';
+  display: inline-block;
+  width: 8px; height: 8px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: zb-puls 1.4s ease-in-out infinite;
+}
+@keyframes zb-puls { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* --- história --- */
+.zb-obal { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.zb-tabulka {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  min-width: 900px;
+}
+.zb-tabulka th, .zb-tabulka td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+.zb-tabulka th {
+  background: var(--panel);
+  font-size: 13px;
+  position: sticky;
+  top: 0;
+}
+.zb-tabulka td.cislo, .zb-tabulka th.cislo { text-align: right; }
+.zb-tabulka tr.failed  { background: color-mix(in srgb, var(--bad) 6%, transparent); }
+.zb-tabulka tr.running { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+
+.zb-kto { color: var(--muted); font-size: 13px; }
+.zb-zadarmo { color: var(--ok); }
+
+.zb-stav-znacka {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  background: var(--panel);
+  color: var(--muted);
+}
+.zb-stav-znacka.done    { background: color-mix(in srgb, var(--ok) 15%, transparent);     color: var(--ok); }
+.zb-stav-znacka.running { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+.zb-stav-znacka.failed  { background: color-mix(in srgb, var(--bad) 15%, transparent);    color: var(--bad); }
+
+.zb-chyb {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--bad);
+}
+
+.zb-zrusit {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--bad);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* ============================================================
+   ŠIROKÉ DISPLEJE
+   ============================================================ */
+@media (min-width: 760px) {
+  .zber { padding: 24px; }
+  .zb-nastavenia label { flex: 0 1 180px; }
+}
