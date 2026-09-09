@@ -189,34 +189,46 @@ function ai_vyber_model(string $ucel, ?int $sourceId = null): array {
     $sid = $sourceId ?? 0;
 
     // 1) stav na dnesok
+    //
+    // Stlpce zo stavu maju predponu stav_: job.ai_models ma tiez stlpce
+    // is_enabled a id, a pri FETCH_ASSOC by ich m.* prepisalo. Bez predpony
+    // sa cital priznak z MODELU namiesto zo stavu — a pri prazdnom model_id
+    // (LEFT JOIN nic nenasiel) vysiel NULL, co sa vyhodnotilo ako "vypnute".
     $st = $pdo->prepare(
-        'SELECT s.is_enabled, s.disabled_reason, s.chosen_by, s.poradie_index, m.*
+        'SELECT s.is_enabled     AS stav_is_enabled,
+                s.disabled_reason AS stav_disabled_reason,
+                s.chosen_by      AS stav_chosen_by,
+                s.poradie_index  AS stav_poradie_index,
+                s.model_id       AS stav_model_id,
+                m.*
            FROM job.ai_stav s
            LEFT JOIN job.ai_models m ON m.id = s.model_id
           WHERE s.ucel = ? AND s.source_id = ? AND s.den = ?');
     $st->execute([$ucel, $sid, $den]);
     $stav = $st->fetch();
 
-    if ($stav && !ai_je_true($stav['is_enabled'])) {
+    if ($stav && !ai_je_true($stav['stav_is_enabled'])) {
         return ['model' => null, 'vypnute' => true,
                 'dovod' => 'Vypnuté pre dnešok: '
-                         . ($stav['disabled_reason'] ?: 'bez uvedeného dôvodu')];
+                         . ($stav['stav_disabled_reason'] ?: 'bez uvedeného dôvodu')];
     }
 
     // 2) poradie — berie sa miesto, na ktorom sme skoncili, aby sa po
     //    prepnuti nevracalo k modelu, ktory uz zlyhal
     $poradie = ai_poradie($ucel, $sourceId);
     if ($poradie) {
-        $index = max(1, (int)($stav['poradie_index'] ?? 1));
+        $index = max(1, (int)($stav['stav_poradie_index'] ?? 1));
         $model = $poradie[min($index, count($poradie)) - 1];
         return ['model' => $model, 'vypnute' => false,
                 'dovod' => sprintf('poradie %d z %d', $index, count($poradie))];
     }
 
-    // Rucne nastaveny model na den bez poradia
-    if ($stav && !empty($stav['model_id'])) {
+    // Rucne nastaveny model na den bez poradia. Kontroluje sa stav_model_id
+    // (odkaz zo stavu), ale vracia sa riadok ciselnika — v $stav su vdaka
+    // m.* aj stlpce modelu vratane model_id.
+    if ($stav && !empty($stav['stav_model_id']) && !empty($stav['model_id'])) {
         return ['model' => $stav, 'vypnute' => false,
-                'dovod' => 'nastavenie na deň (' . $stav['chosen_by'] . ')'];
+                'dovod' => 'nastavenie na deň (' . $stav['stav_chosen_by'] . ')'];
     }
 
     // 3) zaloha: najlepsi bezplatny model z ciselnika
