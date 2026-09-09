@@ -38,6 +38,9 @@ try {
         // naklady na model: zber vs. vyhodnocovanie vhodnosti
         $path === 'v1/admin/naklady'   => require __DIR__ . '/v1/admin/naklady.php',
 
+        // rucne spustenie zberu
+        $path === 'v1/admin/zber'      => require __DIR__ . '/v1/admin/zber.php',
+
         // docasna diagnostika: je na hostingu Python pre scraper?
         $path === 'v1/admin/diag-python' => require __DIR__ . '/v1/admin/diag_python.php',
 
