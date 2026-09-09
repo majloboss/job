@@ -27,3 +27,4 @@ scraper/out/
 
 # nahlad favikony (generovany, len na kontrolu)
 nahlad_favicon.png
+tools/openrouter.php

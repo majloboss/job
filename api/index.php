@@ -29,7 +29,8 @@ try {
         $path === 'v1/offers'  => require __DIR__ . '/v1/offers.php',
         $path === 'v1/matches' => require __DIR__ . '/v1/matches.php',
 
-        // laboratorium modelov
+        // modely: ciselnik, poradie a laboratorium
+        $path === 'v1/admin/ai-ciselnik'=> require __DIR__ . '/v1/admin/ai_ciselnik.php',
         $path === 'v1/admin/ai-models' => require __DIR__ . '/v1/admin/ai_models.php',
         $path === 'v1/admin/ai-lab'    => require __DIR__ . '/v1/admin/ai_lab.php',
         $path === 'v1/admin/ai-naklady'=> require __DIR__ . '/v1/admin/ai_naklady.php',

@@ -4,6 +4,9 @@
 // Model je pouzity zamerne aj na parsovanie inzeratu — vie sa zorientovat aj
 // ked portal zmeni strukturu stranky, na rozdiel od pevneho parsera.
 
+// Vyber modelu a ceny — or_evaluate() rata naklady kazdeho volania.
+require_once __DIR__ . '/ai_modely_fn.php';
+
 const OR_MAX_INPUT_CHARS = 14000;   // vstup sa krati, free modely maju maly kontext
 
 // ------------------------------------------------------------
@@ -249,7 +252,10 @@ function or_call_model(string $prompt, string $model, int $maxTokens = 1200): ar
 // Posudi jeden inzerat jednym modelom a ulozi vysledok do ai_evaluations.
 // ------------------------------------------------------------
 function or_evaluate(array $ctx, string $model): array {
-    $res = or_call_model($ctx['prompt'], $model);
+    // Pri tazani udajov ('parse') moze byt odpoved dlha — obsahuje aj preklad
+    // celeho inzeratu. 1200 tokenov by ju orezalo hned pri prvom dlhsom texte.
+    $ucel = $ctx['ucel'] ?? 'eval';
+    $res = or_call_model($ctx['prompt'], $model, $ucel === 'parse' ? 4000 : 1200);
     $d   = is_array($res['data']) ? $res['data'] : [];
 
     $num = static fn($v) => is_numeric($v) ? (int)$v : null;
@@ -263,27 +269,47 @@ function or_evaluate(array $ctx, string $model): array {
         $bucket = $score === null ? null : ($score <= 25 ? 'nevhodne' : ($score <= 59 ? 'menej_vhodne' : 'vhodne'));
     }
 
+    // Pri 'parse' je vysledkom cela odpoved (vytazene udaje), nie podobjekt
+    // 'parsed' ako pri posudzovani vhodnosti.
+    $parsed  = $ucel === 'parse' ? ($d ?: null) : ($d['parsed'] ?? null);
+    $summary = $ucel === 'parse' ? ($d['summary_sk'] ?? null) : ($d['summary'] ?? null);
+
+    // Cena volania podla cenníka v case volania — spatny prepocet zo
+    // sucasneho cennika by skresloval historiu.
+    $cena = null;
+    if ($res['usage']) {
+        $cm = db()->prepare('SELECT price_input_1m, price_output_1m FROM job.ai_models
+                              WHERE model_id = ?');
+        $cm->execute([$model]);
+        $cena = ai_cena_volania($cm->fetch() ?: null,
+                                $res['usage']['prompt_tokens'] ?? null,
+                                $res['usage']['completion_tokens'] ?? null);
+    }
+
     $st = db()->prepare(
         'INSERT INTO job.ai_evaluations
             (offer_id, user_id, lab_run_id, model_id, prompt_id, source_url,
+             ucel, source_id, call_type,
              score, bucket, summary, pros, cons, missing_skills, parsed,
              status, error, raw_response,
-             prompt_tokens, completion_tokens, total_tokens, took_ms)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             prompt_tokens, completion_tokens, total_tokens, cost_usd, took_ms)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
          RETURNING id');
     $st->execute([
         $ctx['offer_id'] ?? null, $ctx['user_id'] ?? null, $ctx['lab_run_id'] ?? null,
         mb_substr($model, 0, 150), $ctx['prompt_id'] ?? null,
         isset($ctx['url']) ? mb_substr($ctx['url'], 0, 500) : null,
+        $ucel, $ctx['source_id'] ?? null, $ctx['call_type'] ?? 'live',
         $score, $bucket,
-        isset($d['summary']) && is_string($d['summary']) ? mb_substr($d['summary'], 0, 1000) : null,
+        is_string($summary) ? mb_substr($summary, 0, 1000) : null,
         $arr($d['pros'] ?? null), $arr($d['cons'] ?? null), $arr($d['missing_skills'] ?? null),
-        $arr($d['parsed'] ?? null),
+        $arr($parsed),
         $res['status'], $res['error'],
         $res['error'] !== null ? mb_substr($res['content'], 0, 2000) : null,
         $res['usage']['prompt_tokens'] ?? null,
         $res['usage']['completion_tokens'] ?? null,
         $res['usage']['total_tokens'] ?? null,
+        $cena,
         $res['took_ms'],
     ]);
 
@@ -298,21 +324,28 @@ function or_evaluate(array $ctx, string $model): array {
               WHERE model_id = ?')->execute([$trvale, $model]);
     }
 
+    // Uspech znamena pri kazdom ucele nieco ine: pri posudzovani vhodnosti
+    // musi prist skore, pri tazani udajov aspon nazov pozicie. Model, ktory
+    // vrati prazdny JSON, "odpovedal" — pouzitelny vsak nie je.
+    $ok = $res['status'] === 'ok'
+        && ($ucel === 'parse' ? !empty($d['title']) : $score !== null);
+
     return [
         'id'      => (int)$st->fetchColumn(),
         'model'   => $model,
-        'ok'      => $res['status'] === 'ok' && $score !== null,
+        'ok'      => $ok,
         'status'  => $res['status'],
         'error'   => $res['error'],
         'vyradeny' => $trvale !== null,
         'score'   => $score,
         'bucket'  => $bucket,
-        'summary' => $d['summary'] ?? null,
+        'summary' => $summary,
         'pros'    => $d['pros'] ?? null,
         'cons'    => $d['cons'] ?? null,
         'missing_skills' => $d['missing_skills'] ?? null,
-        'parsed'  => $d['parsed'] ?? null,
+        'parsed'  => $parsed,
         'tokens'  => $res['usage']['total_tokens'] ?? null,
+        'cost'    => $cena,
         'ms'      => $res['took_ms'],
     ];
 }

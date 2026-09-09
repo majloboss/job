@@ -144,6 +144,11 @@ img { max-width: 100%; height: auto; }
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
+/* Spravcovske sekcie su odlisene, aby bolo vidiet, ze nepatria beznemu
+   pouzivatelovi. Zobrazuju sa iba adminovi. */
+.app-nav a.app-admin { color: var(--muted); }
+.app-nav a.app-admin.active { color: var(--accent); }
+
 .app-odhlasit {
   margin: 10px 20px 0;
   min-height: var(--dotyk);

@@ -5,13 +5,17 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 // Na mobile je navigacia skryta za tlacidlom, na sirokych displejoch je v riadku.
 
 const ODKAZY = [
-  { to: '/lab',         text: 'Laboratórium' },
+  { to: '/ponuky',      text: 'Ponuky' },
   { to: '/dokumenty',   text: 'Dokumenty' },
   { to: '/preferencie', text: 'Preferencie' },
+  { to: '/modely',      text: 'Modely',       admin: true },
+  { to: '/lab',         text: 'Laboratórium', admin: true },
 ];
 
 export default function App() {
   const [otvorene, setOtvorene] = useState(false);
+  const jeAdmin = localStorage.getItem('role') === 'admin';
+  const odkazy  = ODKAZY.filter(o => !o.admin || jeAdmin);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -45,8 +49,10 @@ export default function App() {
         </button>
 
         <nav className={'app-nav' + (otvorene ? ' otvorene' : '')}>
-          {ODKAZY.map(o => (
-            <NavLink key={o.to} to={o.to}>{o.text}</NavLink>
+          {odkazy.map(o => (
+            <NavLink key={o.to} to={o.to} className={o.admin ? 'app-admin' : undefined}>
+              {o.text}
+            </NavLink>
           ))}
           <button className="app-odhlasit" onClick={odhlasit}>Odhlásiť</button>
         </nav>

@@ -1,10 +1,16 @@
 <?php
-// Laboratorium modelov — porovnanie posudenia jedneho inzeratu viacerymi modelmi.
+// Laboratorium modelov — porovnanie jedneho inzeratu viacerymi modelmi.
+//
+// Testuju sa DVA ucely, kazdy s vlastnym promptom:
+//   'parse' — vytazenie udajov z inzeratu (krok 1: zber)
+//   'eval'  — posudenie vhodnosti pre pouzivatela (krok 2)
 //
 // POST /v1/admin/ai-lab            zaloz beh: stiahne inzerat, pripravi prompt
-//      Telo: { "url": "...", "models": ["a/b:free", ...], "document_id": 12 }
+//      Telo: { "url": "...", "models": [...], "ucel": "parse", "document_id": 12 }
 // POST /v1/admin/ai-lab?step=1     otestuje JEDEN model v ramci behu
 //      Telo: { "run_id": 5, "model": "a/b:free" }
+// POST /v1/admin/ai-lab?zhoda=1    vyhodnoti zhodu modelov po dobehnuti behu
+//      Telo: { "run_id": 5 }
 // GET  /v1/admin/ai-lab?run_id=5   vysledky behu
 // GET  /v1/admin/ai-lab            zoznam poslednych behov
 //
@@ -13,6 +19,8 @@
 $auth = require_auth(true);
 require_once __DIR__ . '/../../helpers/openrouter_boot.php';
 require_once __DIR__ . '/../../helpers/openrouter_fn.php';
+require_once __DIR__ . '/../../helpers/ai_modely_fn.php';
+require_once __DIR__ . '/../../helpers/ai_zhoda_fn.php';
 
 $pdo = db();
 
@@ -24,7 +32,7 @@ if ($method === 'GET') {
 
     if ($runId === 0) {
         $st = $pdo->prepare(
-            'SELECT id, source_url, offer_title, status, models_total, models_done,
+            'SELECT id, source_url, offer_title, ucel, status, models_total, models_done,
                     models_ok, started_at, finished_at
                FROM job.ai_lab_runs
               WHERE user_id = ?
@@ -38,12 +46,20 @@ if ($method === 'GET') {
     $run = $st->fetch();
     if (!$run) json_error('Beh sa nenašiel', 404);
 
+    $ucel = $run['ucel'] ?? 'eval';
+
+    // Pri 'parse' rozhoduje zhoda s ostatnymi, pri 'eval' skore — preto sa
+    // aj zoraduje inak. Model, ktory sa nezhodol, patri dolu bez ohladu na to,
+    // ako rychlo odpovedal.
     $st = $pdo->prepare(
         'SELECT id, model_id, score, bucket, summary, pros, cons, missing_skills,
-                parsed, status, error, total_tokens, took_ms, created_at
+                parsed, agrees, status, error, prompt_tokens, completion_tokens,
+                total_tokens, cost_usd, took_ms, created_at
            FROM job.ai_evaluations
           WHERE lab_run_id = ?
-          ORDER BY (score IS NULL), score DESC, took_ms');
+          ORDER BY ' . ($ucel === 'parse'
+              ? '(agrees IS NOT TRUE), took_ms'
+              : '(score IS NULL), score DESC, took_ms'));
     $st->execute([$runId]);
 
     $rows = [];
@@ -51,11 +67,12 @@ if ($method === 'GET') {
         foreach (['pros', 'cons', 'missing_skills', 'parsed'] as $f) {
             $r[$f] = $r[$f] !== null ? json_decode($r[$f], true) : null;
         }
-        $r['score'] = $r['score'] !== null ? (int)$r['score'] : null;
+        $r['score']  = $r['score'] !== null ? (int)$r['score'] : null;
+        $r['agrees'] = $r['agrees'] === null ? null : ai_je_true($r['agrees']);
         $rows[] = $r;
     }
 
-    // medián skóre — orientacny bod, ako sa modely zhoduju
+    // medián skóre — orientacny bod pri posudzovani vhodnosti
     $scores = array_values(array_filter(array_column($rows, 'score'), fn($v) => $v !== null));
     sort($scores);
     $n = count($scores);
@@ -69,10 +86,15 @@ if ($method === 'GET') {
     }
     unset($r);
 
+    // Pri tazani udajov je hlavne kriterium vacsinovy nazor na jednotlive
+    // polia — ukaze sa, v com presne sa modely rozchadzaju.
+    $zhoda = $ucel === 'parse' ? ai_prehlad_zhody($runId) : null;
+
     $run['offer_text'] = mb_substr((string)$run['offer_text'], 0, 4000);
     unset($run['offer_html']);   // do zoznamu netreba, je to velke
 
-    json_ok(['run' => $run, 'results' => $rows,
+    json_ok(['run' => $run, 'results' => $rows, 'ucel' => $ucel,
+             'zhoda' => $zhoda,
              'median_score' => $median, 'evaluated' => $n]);
 }
 
@@ -98,6 +120,8 @@ if (($_GET['step'] ?? '') === '1') {
     $template = $ps->fetchColumn();
     if ($template === false) json_error('Prompt behu sa nenašiel', 500);
 
+    // Pri tazani udajov ide do promptu iba inzerat — CV ani preferencie
+    // s vytazenim udajov nesuvisia a len by minuli tokeny.
     $prompt = or_build_prompt(
         $template,
         (string)$run['prefs_text'], (string)$run['cv_text'], (string)$run['offer_text']
@@ -110,9 +134,12 @@ if (($_GET['step'] ?? '') === '1') {
         'offer_id'   => $run['offer_id'],
         'prompt_id'  => $run['prompt_id'],
         'url'        => $run['source_url'],
+        'ucel'       => $run['ucel'] ?? 'eval',
+        'source_id'  => $run['source_id'],
+        'call_type'  => 'test',
     ], $model);
 
-    or_update_model_stats($model);
+    ai_prepocitaj_statistiku($model);
 
     $pdo->prepare(
         'UPDATE job.ai_lab_runs
@@ -126,10 +153,36 @@ if (($_GET['step'] ?? '') === '1') {
 }
 
 // ------------------------------------------------------------
+// POST ?zhoda=1 — vyhodnot zhodu modelov po dobehnuti behu
+//
+// Vola sa raz, ked su vsetky modely otestovane. Az vtedy je z coho zistit
+// vacsinovy nazor — pri priebeznom vyhodnocovani by prve dva modely urcili
+// "vacsinu" a ostatne by sa im prisposobovali.
+// ------------------------------------------------------------
+if (($_GET['zhoda'] ?? '') === '1') {
+    $runId = (int)($body['run_id'] ?? 0);
+    if ($runId === 0) json_error('Chýba run_id', 400);
+
+    $st = $pdo->prepare('SELECT ucel FROM job.ai_lab_runs WHERE id = ? AND user_id = ?');
+    $st->execute([$runId, $auth['user_id']]);
+    $ucel = $st->fetchColumn();
+    if ($ucel === false) json_error('Beh sa nenašiel', 404);
+    if ($ucel !== 'parse') {
+        json_error('Zhoda sa vyhodnocuje len pri ťažení údajov', 400);
+    }
+
+    $vysledok = ai_vyhodnot_zhodu($runId);
+    json_ok(['zhoda' => $vysledok,
+             'prehlad' => ai_prehlad_zhody($runId)]);
+}
+
+// ------------------------------------------------------------
 // POST — zaloz novy beh
 // ------------------------------------------------------------
 $url    = trim((string)($body['url'] ?? ''));
 $models = $body['models'] ?? [];
+$ucel   = $body['ucel'] ?? 'eval';
+if (!in_array($ucel, ['parse', 'eval'], true)) json_error('Neznámy účel: ' . $ucel, 400);
 if ($url === '')       json_error('Chýba URL inzerátu', 400);
 if (!is_array($models) || !$models) json_error('Nie je vybraný žiadny model', 400);
 if (count($models) > 40) json_error('Naraz sa dá porovnať najviac 40 modelov', 400);
@@ -150,38 +203,46 @@ foreach ($pdo->query('SELECT id, base_url FROM job.sources')->fetchAll() as $s) 
 
 $page = or_fetch_offer($url);
 
-// preferencie (volny text) a zivotopis pouzivatela
-$st = $pdo->prepare('SELECT free_text FROM job.user_preferences WHERE user_id = ?');
-$st->execute([$auth['user_id']]);
-$prefsText = (string)($st->fetchColumn() ?: '');
+// Pri tazani udajov ('parse') sa CV ani preferencie nepouzivaju — model ma
+// z inzeratu vytiahnut fakty, nie posudit, komu sa hodia. Nacitavaju sa
+// preto len pre 'eval'.
+$prefsText = '';
+$doc       = null;
+$cvText    = '';
 
-// Frontend posiela document_id: null, ked nie je nic vybrate — isset() by
-// v tom pripade vratilo false rovnako ako pri chybajucom kluci, co je tu
-// spravne: obe znamenaju "vyber hlavne CV".
-$docId = (int)($body['document_id'] ?? 0);
-if ($docId > 0) {
-    $st = $pdo->prepare(
-        'SELECT id, extracted_text FROM job.user_documents WHERE id = ? AND user_id = ?');
-    $st->execute([$docId, $auth['user_id']]);
-} else {
-    $st = $pdo->prepare(
-        "SELECT id, extracted_text FROM job.user_documents
-          WHERE user_id = ? AND doc_type = 'cv' AND use_for_ai
-          ORDER BY is_primary DESC, created_at DESC LIMIT 1");
+if ($ucel === 'eval') {
+    $st = $pdo->prepare('SELECT free_text FROM job.user_preferences WHERE user_id = ?');
     $st->execute([$auth['user_id']]);
-}
-$doc    = $st->fetch();
-$cvText = (string)($doc['extracted_text'] ?? '');
+    $prefsText = (string)($st->fetchColumn() ?: '');
 
-$prompt = or_active_prompt('offer_eval');
+    // Frontend posiela document_id: null, ked nie je nic vybrate — isset() by
+    // v tom pripade vratilo false rovnako ako pri chybajucom kluci, co je tu
+    // spravne: obe znamenaju "vyber hlavne CV".
+    $docId = (int)($body['document_id'] ?? 0);
+    if ($docId > 0) {
+        $st = $pdo->prepare(
+            'SELECT id, extracted_text FROM job.user_documents WHERE id = ? AND user_id = ?');
+        $st->execute([$docId, $auth['user_id']]);
+    } else {
+        $st = $pdo->prepare(
+            "SELECT id, extracted_text FROM job.user_documents
+              WHERE user_id = ? AND doc_type = 'cv' AND use_for_ai
+              ORDER BY is_primary DESC, created_at DESC LIMIT 1");
+        $st->execute([$auth['user_id']]);
+    }
+    $doc    = $st->fetch() ?: null;
+    $cvText = (string)($doc['extracted_text'] ?? '');
+}
+
+$prompt = or_active_prompt($ucel === 'parse' ? 'offer_parse' : 'offer_eval');
 
 $st = $pdo->prepare(
     'INSERT INTO job.ai_lab_runs
-        (user_id, source_url, source_id, prompt_id, offer_text, offer_title, offer_html,
+        (user_id, source_url, source_id, ucel, prompt_id, offer_text, offer_title, offer_html,
          cv_document_id, cv_text, prefs_text, input_chars, models_total, status)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,\'running\') RETURNING id');
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,\'running\') RETURNING id');
 $st->execute([
-    $auth['user_id'], mb_substr($url, 0, 500), $sourceId, $prompt['id'],
+    $auth['user_id'], mb_substr($url, 0, 500), $sourceId, $ucel, $prompt['id'],
     $page['text'], $page['title'], $page['html'],
     $doc['id'] ?? null, $cvText, $prefsText,
     mb_strlen($page['text']), count($models),
@@ -190,6 +251,7 @@ $runId = (int)$st->fetchColumn();
 
 json_ok([
     'run_id'      => $runId,
+    'ucel'        => $ucel,
     'title'       => $page['title'],
     'input_chars' => mb_strlen($page['text']),
     'truncated'   => mb_strlen($page['text']) > OR_MAX_INPUT_CHARS,

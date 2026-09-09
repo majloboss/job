@@ -1,0 +1,334 @@
+/* ============================================================
+   Zoznam pracovnych ponuk.
+
+   Na telefone sa tabulka rozpadne na KARTY — sedem stlpcov sa na 360 px
+   nezmesti a vodorovne posuvanie sa zle ovlada. Hlavicka tabulky je vtedy
+   skryta, radenie sa robi cez rozbalovaci zoznam.
+   Od 900 px je to naozajstna tabulka s klikatelnymi hlavickami.
+   ============================================================ */
+
+.ponuky { padding: 16px; max-width: 1200px; margin: 0 auto; }
+
+.ponuky h1 {
+  margin: 0 0 16px;
+  font-size: 22px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.pon-pocet { font-size: 14px; font-weight: 400; color: var(--muted); }
+
+/* --- filtre --- */
+.pon-filtre {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.pon-filtre input[type="search"],
+.pon-filtre select,
+.pon-mzda input {
+  min-height: var(--dotyk);
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+.pon-hladat { flex: 1 1 100%; }
+
+.pon-mzda, .pon-prepinac {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.pon-mzda input { width: 90px; }
+
+.pon-zrusit {
+  min-height: var(--dotyk);
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pon-chyba {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+  color: var(--bad);
+}
+.pon-prazdne { padding: 24px 12px; color: var(--muted); text-align: center; }
+
+/* ============================================================
+   TELEFON — karty
+   ============================================================ */
+.pon-tabulka { width: 100%; border-collapse: collapse; }
+.pon-tabulka thead { display: none; }
+
+.pon-tabulka tr {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+  padding: 12px;
+  cursor: pointer;
+  background: var(--bg);
+}
+.pon-tabulka tr:active { background: var(--panel); }
+
+.pon-tabulka td { display: block; padding: 0; border: 0; }
+
+/* Vedlajsie udaje dostanu popisku, aby sa v karte dali rozoznat. */
+.pon-tabulka td:not(.hlavny) {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.pon-tabulka td:empty { display: none; }
+
+.pon-titul {
+  display: block;
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--fg);
+}
+/* Sumar je 2-3 vety; v zozname staci nahlad na dva riadky. */
+.pon-sumar {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.pon-tagy { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.pon-tag {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.pon-agentura {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  color: var(--warn);
+}
+
+.pon-skore {
+  display: inline-block;
+  min-width: 32px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+  text-align: center;
+  background: var(--panel);
+  color: var(--fg);
+}
+.pon-skore.vhodne       { background: color-mix(in srgb, var(--ok) 18%, transparent);  color: var(--ok); }
+.pon-skore.menej_vhodne { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.pon-skore.nevhodne     { background: color-mix(in srgb, var(--bad) 14%, transparent);  color: var(--bad); }
+.pon-nic { color: var(--muted); }
+
+/* --- strankovanie --- */
+.pon-strankovanie {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 20px 0;
+  flex-wrap: wrap;
+  font-size: 14px;
+  color: var(--muted);
+}
+.pon-strankovanie button {
+  min-height: var(--dotyk);
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.pon-strankovanie button:disabled { opacity: .4; cursor: default; }
+
+/* ============================================================
+   DETAIL — prekrytie
+   ============================================================ */
+.pon-prekrytie {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, .5);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+}
+
+.pon-detail {
+  position: relative;
+  background: var(--bg);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 20px 16px 32px;
+  width: 100%;
+  max-height: 92vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pon-zavri {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: var(--dotyk);
+  height: var(--dotyk);
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pon-detail h2 { margin: 0 32px 6px 0; font-size: 19px; }
+.pon-meta { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+
+.pon-udaje {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  margin: 0 0 14px;
+  font-size: 14px;
+}
+.pon-udaje dt { color: var(--muted); }
+.pon-udaje dd { margin: 0; }
+
+.pon-sumar-detail {
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--panel);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  margin: 0 0 14px;
+  font-size: 15px;
+}
+
+.pon-jazyky { display: flex; gap: 6px; margin: 14px 0 8px; }
+.pon-jazyky button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.pon-jazyky button.aktivny {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* Text inzeratu je predformatovany, ale musi sa zalamovat — inak by
+   dlhe riadky roztiahli prekrytie do sirky. */
+.pon-text {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 0 16px;
+  color: var(--fg);
+}
+
+.pon-zber { margin: 12px 0; font-size: 13px; color: var(--muted); }
+.pon-zber summary { cursor: pointer; min-height: 36px; line-height: 36px; }
+.pon-zber table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.pon-zber td { padding: 4px 8px; border-bottom: 1px solid var(--line); }
+
+.pon-original {
+  display: inline-block;
+  min-height: var(--dotyk);
+  line-height: var(--dotyk);
+  padding: 0 16px;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+/* ============================================================
+   SIROKE DISPLEJE — naozajstna tabulka
+   ============================================================ */
+@media (min-width: 900px) {
+  .ponuky { padding: 24px; }
+  .pon-hladat { flex: 1 1 260px; }
+
+  .pon-tabulka { font-size: 14px; }
+  .pon-tabulka thead { display: table-header-group; }
+  .pon-tabulka tr { display: table-row; border: 0; margin: 0; padding: 0; border-radius: 0; }
+  .pon-tabulka tr:hover { background: var(--panel); }
+
+  .pon-tabulka th {
+    padding: 8px 10px;
+    border-bottom: 2px solid var(--line);
+    text-align: left;
+    background: var(--panel);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  .pon-tabulka th:hover  { color: var(--accent); }
+  .pon-tabulka th.radene { color: var(--accent); }
+  .pon-sipka { margin-left: 4px; font-size: 10px; }
+
+  .pon-tabulka td {
+    display: table-cell;
+    padding: 10px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+    margin: 0;
+  }
+  .pon-tabulka td:empty { display: table-cell; }
+  .pon-tabulka td:not(.hlavny) { font-size: 14px; }
+  .pon-tabulka td.hlavny { max-width: 420px; }
+  .pon-cislo { white-space: nowrap; }
+
+  /* V tabulke uz sumar zabera prilis vela miesta — staci v detaile. */
+  .pon-sumar { -webkit-line-clamp: 1; }
+
+  /* Detail vystreduje ako dialog, nie ako spodny panel. */
+  .pon-prekrytie { align-items: center; padding: 24px; }
+  .pon-detail {
+    max-width: 780px;
+    border-radius: var(--radius);
+    padding: 24px 28px 28px;
+    max-height: 86vh;
+  }
+}

@@ -1,0 +1,273 @@
+/* ============================================================
+   Sprava modelov — ciselnik a poradie.
+   Mobile-first: na telefone je tabulka posuvatelna do sirky vo vlastnom
+   obale, aby sa cela stranka nehybala.
+   ============================================================ */
+
+.modely { padding: 16px; max-width: 1100px; margin: 0 auto; }
+.modely h1 { margin: 0 0 16px; font-size: 22px; }
+.modely h2 {
+  margin: 24px 0 8px;
+  font-size: 17px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* --- vyber ulohy --- */
+.mod-ucely {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.mod-ucel {
+  min-height: var(--dotyk);
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.mod-ucel.aktivny {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.mod-ucely select {
+  min-height: var(--dotyk);
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+.mod-sync {
+  min-height: var(--dotyk);
+  padding: 0 16px;
+  margin-left: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.mod-sync:disabled { opacity: .5; cursor: default; }
+
+/* --- hlasky --- */
+.mod-chyba, .mod-sprava, .mod-nacitava, .mod-prazdne {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  margin: 12px 0;
+}
+.mod-chyba  { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); }
+.mod-sprava { background: color-mix(in srgb, var(--ok) 12%, transparent);  color: var(--ok); }
+.mod-nacitava, .mod-prazdne { color: var(--muted); }
+
+.mod-popis { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+
+/* --- co bezi prave teraz --- */
+.mod-aktivny {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--ok);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mod-aktivny.vypnute { border-left-color: var(--bad); }
+
+.mod-stitok {
+  display: block;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+}
+.mod-aktivny strong { font-size: 16px; word-break: break-all; }
+.mod-dovod { display: block; color: var(--muted); font-size: 13px; }
+
+.mod-rozpocet {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+.mod-rozpocet input[type="number"] {
+  width: 80px;
+  min-height: 36px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+.mod-rozpocet button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.mod-vypnut { color: var(--bad); }
+.mod-minute { color: var(--muted); }
+
+/* --- poradie --- */
+.mod-ulozit {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mod-zoznam { list-style: none; margin: 0; padding: 0; }
+.mod-zoznam li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 6px;
+  background: var(--bg);
+  flex-wrap: wrap;
+}
+.mod-zoznam li.nepouzitelny { opacity: .55; }
+
+.mod-cislo { font-weight: 700; color: var(--muted); min-width: 22px; }
+.mod-nazov { flex: 1 1 200px; word-break: break-all; font-size: 14px; }
+
+.mod-free, .mod-vyradeny {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  vertical-align: middle;
+}
+.mod-free    { background: color-mix(in srgb, var(--ok) 15%, transparent);  color: var(--ok); }
+.mod-vyradeny{ background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+
+.mod-cisla { display: flex; gap: 10px; color: var(--muted); font-size: 13px; }
+
+.mod-tlacidla { display: flex; gap: 4px; margin-left: auto; }
+.mod-tlacidla button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.mod-tlacidla button:disabled { opacity: .3; cursor: default; }
+
+/* --- filtre nad ciselnikom --- */
+.mod-pocty { font-size: 13px; font-weight: 400; color: var(--muted); }
+
+.mod-filtre {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.mod-filtre input[type="search"] {
+  flex: 1 1 200px;
+  min-height: var(--dotyk);
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+.mod-filtre label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* --- tabulka ciselnika --- */
+/* Vodorovne sa posuva IBA tabulka, nie cela stranka. */
+.mod-tabulka-obal { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.mod-tabulka {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  min-width: 720px;
+}
+.mod-tabulka th, .mod-tabulka td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+.mod-tabulka th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+}
+.mod-tabulka th:hover { color: var(--accent); }
+.mod-tabulka td.uzky, .mod-tabulka th.uzky { text-align: right; width: 1%; }
+.mod-tabulka tr.nepouzitelny { opacity: .5; }
+
+.mod-sipka { margin-left: 4px; font-size: 10px; }
+
+.mod-bunka-model { white-space: normal; }
+.mod-id { word-break: break-all; }
+.mod-dovod-maly {
+  display: block;
+  font-size: 12px;
+  color: var(--bad);
+}
+
+.mod-pridat, .mod-prepnut {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.mod-pridat:disabled { opacity: .4; cursor: default; color: var(--ok); }
+
+/* ============================================================
+   SIROKE DISPLEJE
+   ============================================================ */
+@media (min-width: 720px) {
+  .modely { padding: 24px; }
+  .mod-aktivny { flex-direction: row; align-items: center; justify-content: space-between; }
+  .mod-rozpocet { margin-left: auto; }
+}

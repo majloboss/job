@@ -378,3 +378,67 @@
 }
 .lab-naklady .num { text-align: right; font-variant-numeric: tabular-nums; }
 .lab-naklady code { font-size: 12px; }
+
+/* ============================================================
+   VYBER UCELU — zber udajov vs. posudenie vhodnosti
+   Kazdy krok appky moze bezat na inom modeli, preto sa testuje zvlast.
+   ============================================================ */
+.lab-ucely { display: flex; gap: 8px; margin: 0 0 16px; flex-wrap: wrap; }
+
+.lab-ucely button {
+  flex: 1 1 auto;
+  min-height: var(--dotyk);
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.lab-ucely button.aktivny {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.lab-ucely button:disabled { opacity: .6; cursor: default; }
+
+/* ============================================================
+   ZHODA MODELOV PO POLIACH
+   ============================================================ */
+.lab-zhoda { margin: 20px 0; }
+.lab-zhoda h3 { margin: 0 0 8px; font-size: 16px; }
+
+.lab-zhoda-tabulka { width: 100%; border-collapse: collapse; font-size: 14px; }
+.lab-zhoda-tabulka th {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 2px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+}
+.lab-zhoda-tabulka td {
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.lab-zhoda-tabulka td:first-child { white-space: nowrap; color: var(--muted); }
+
+/* Vacsinovy nazor je zvyrazneny — ostatne hodnoty su odchylky od neho. */
+.lab-hodnota {
+  display: inline-block;
+  margin: 0 6px 4px 0;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  font-size: 13px;
+}
+.lab-hodnota.vacsina {
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  color: var(--ok);
+  font-weight: 600;
+}
+.lab-hodnota em { font-style: normal; color: var(--muted); font-size: 12px; }

@@ -230,19 +230,83 @@ zhrnutie, argumenty pre/proti, chýbajúce zručnosti a **rozparsované údaje o
 (profesia, mzda, jazyky, úväzok, agentúra). Parsovanie robí zámerne model — zorientuje sa
 aj keď portál zmení štruktúru stránky.
 
+### Čo sa z inzerátu ťaží (prompt `offer_parse`)
+
+| Údaj | Kto ho zistí |
+|---|---|
+| portál, URL, externé ID | **scraper** — vie ich isto, do promptu nejdú |
+| originálny text a HTML | **scraper** — ukladá sa tak, ako bol na zdroji |
+| názov pozície, firma, agentúra áno/nie | model |
+| dátum a čas zverejnenia (`published_at` + doslovný text) | model |
+| mzda (od/do, mena, obdobie) a doslovný text mzdy | model |
+| úväzok, réžim (onsite/hybrid/remote), úroveň, vzdelanie, nástup | model |
+| lokality výkonu práce, jazyky s úrovňou | model |
+| **kľúčové slová** náplne práce (5–15) | model |
+| **technológie**, nástroje, stroje, certifikáty | model |
+| **odvetvie** (`industry`) | model |
+| **krátky súhrn po slovensky** (`summary_sk`) — 2–3 vety | model |
+| **preklad celého textu do SJ** (`text_sk`) — len ak originál nie je po slovensky | model |
+
+Relatívny čas („Pred 2 dňami") model **neprepočítava** — vráti ho doslovne do
+`published_at_raw` a dátum dopočíta aplikácia, ktorá pozná čas zberu.
+
+Kľúčové slová sa medzi modelmi zámerne **neporovnávajú** pri vyhodnocovaní zhody —
+každý model ich formuluje inak a zhoda by bola náhodná.
+
+### Dva kroky získavania údajov
+
+Aplikácia získava údaje v **dvoch krokoch a každý môže bežať na inom modeli**:
+
+| Účel | Čo robí | Prompt | Hlavné kritérium výberu modelu |
+|---|---|---|---|
+| `parse` | vyťaží údaje z inzerátu pri zbere | `offer_parse` | **zhoda** s ostatnými modelmi |
+| `eval` | posúdi vhodnosť pre používateľa | `offer_eval` | odchýlka od mediánu skóre |
+
+Krok `parse` beží **raz na inzerát** (výsledok je pre všetkých rovnaký), krok `eval`
+**pre každého používateľa zvlášť** (závisí od jeho CV a preferencií).
+
+### Výber modelu — číselník, nie konfigurák
+
+Model sa **neberie z konštanty `OPENROUTER_MODEL`**. Prevzaté z BetClubu (migrácie
+079/080/082), lebo zmena modelu nemá znamenať zmenu súboru na serveri a výpadok
+modelu nemá zastaviť aplikáciu.
+
+| Tabuľka | Účel |
+|---|---|
+| `job.ai_models` | číselník všetkých modelov na OpenRouteri **vrátane cien** za 1M tokenov |
+| `job.ai_poradie` | **zoznam modelov v poradí** na dvojicu (účel, portál) |
+| `job.ai_stav` | kde v poradí sme, koľko sa dnes minulo, či nie je úloha vypnutá |
+
+**Poradie** je zoznam: keď prvý model prestane fungovať (vyčerpaný denný limit,
+výpadok), aplikácia sa **sama prepne na ďalší** — po troch zlyhaniach za sebou, alebo
+hneď pri trvalej prekážke. Osvedčené je dva-tri bezplatné a za nimi lacný platený.
+Poradie sa viaže na účel a voliteľne na portál (`source_id`); `NULL` = pre všetky portály.
+
+**Stráž rozpočtu:** pri 80 % denného stropu sa prepne na najlacnejší funkčný model,
+pri 150 % sa úloha pre daný deň zastaví. Obe hranice pošlú e-mail adminovi, každú
+najviac raz za deň. Cena sa ukladá **v čase volania** — cenníky sa menia.
+
+Do výberu idú len modely s **výlučne textovým výstupom**: hudobné a obrázkové modely
+(lyria, veo) majú v modalitách aj „text", ale za tokeny nič nestoja, takže by
+v poradí podľa ceny vyšli ako najlacnejšie.
+
 ### Laboratórium modelov
 
-Obrazovka na porovnanie: zadáš URL inzerátu, vyberieš bezplatné modely a spustíš.
-Ktoré modely sú zadarmo sa v čase mení, preto sa zoznam ťahá naživo z OpenRoutera.
+Obrazovka na porovnanie: vyberieš účel (zber / vhodnosť), zadáš URL inzerátu, vyberieš
+modely a spustíš. Modely sa volajú **postupne, po jednom** — bezplatné majú limit
+požiadaviek za minútu a paralelné volanie by skončilo na HTTP 429.
 
-Modely sa volajú **postupne, po jednom** — bezplatné majú limit požiadaviek za minútu
-a paralelné volanie by skončilo na HTTP 429.
+**Pri účele `eval`** rozhoduje **odchýlka od mediánu**: model do 5 bodov od mediánu
+hodnotí ako ostatné.
 
-Tabuľka ukazuje skóre, **odchýlku od mediánu ostatných modelov**, zaradenie, zhrnutie,
-tokeny a čas. Odchýlka je hlavné kritérium: model do 5 bodov od mediánu hodnotí ako
-ostatné. Riadok sa dá rozkliknúť na detail (pre/proti, chýbajúce zručnosti, vyťažené údaje).
+**Pri účele `parse`** rozhoduje **zhoda s ostatnými**. Samotná úspešnosť nestačí —
+BetClub to zistil na livescore: z 11 modelov, ktoré test „prešli", vrátilo 6 rôznych
+skóre toho istého zápasu. Model, ktorý si údaje vymyslí, je horší než žiadny.
+Porovnáva sa **pole po poli** s váhami (mzda a názov vážia najviac), model dostane
+vážený podiel polí, v ktorých sa trafil s väčšinou; od 70 % sa berie ako zhodný.
+Tabuľka ukáže, na ktorých poliach sa modely rozchádzajú — tam sa ladí prompt.
 
-Víťaza zapíšeš do `api/config/openrouter.php` ako `OPENROUTER_MODEL`.
+Víťaza zaradíš do **poradia** v sekcii Modely (`job.ai_poradie`).
 
 
 ## 6. API endpointy (návrh)
@@ -270,17 +334,50 @@ PUT    /api/v1/admin/companies/{id}    admin: označiť firmu ako agentúru
 GET    /api/v1/admin/ai-models         zoznam bezplatných modelov na OpenRouteri
 POST   /api/v1/admin/ai-lab            laboratórium: založiť beh { url, models, document_id }
 POST   /api/v1/admin/ai-lab?step=1     laboratórium: otestovať jeden model { run_id, model }
+POST   /api/v1/admin/ai-lab?zhoda=1    laboratórium: vyhodnotiť zhodu modelov { run_id }
 GET    /api/v1/admin/ai-lab?run_id=5   laboratórium: výsledky behu
+
+GET    /api/v1/admin/ai-ciselnik?ucel=parse     číselník, poradie a stav dňa
+POST   /api/v1/admin/ai-ciselnik?akcia=sync     zosynchronizovať cenník z OpenRoutera
+POST   /api/v1/admin/ai-ciselnik?akcia=poradie  uložiť poradie { ucel, source_id, modely[] }
+POST   /api/v1/admin/ai-ciselnik?akcia=model    zapnúť/vypnúť model { model_id, is_enabled }
+POST   /api/v1/admin/ai-ciselnik?akcia=rozpocet nastaviť denný strop { ucel, budget }
+POST   /api/v1/admin/ai-ciselnik?akcia=stav     zapnúť/vypnúť úlohu { ucel, is_enabled }
 ```
+
+### Obrazovka ponúk
+
+`GET /api/v1/offers` obsluhuje **používateľa aj admina** — je to ten istý komponent
+[web/src/pages/Ponuky.jsx](web/src/pages/Ponuky.jsx), admin vidí navyše len to, ktorý
+model inzerát vyťažil a koľko to stálo. Dve takmer zhodné obrazovky by sa udržiavali
+zbytočne.
+
+**Filtre** (skladajú sa cez AND): fulltext v názve, firme, súhrne a kľúčových slovách,
+portál, odvetvie, úväzok, réžim, mzda od, vek ponuky v dňoch, bez agentúr.
+Inzerát **bez uvedenej mzdy sa pri filtri na mzdu štandardne ponecháva** — inak by
+používateľ prišiel o veľkú časť ponúk.
+
+**Radenie klikom na stĺpec** (pozícia, firma, mzda, odvetvie, portál, zverejnené,
+vhodnosť). Radí a stránkuje **server**, nie prehliadač — pri tisíckach inzerátov sa
+nedá zoradiť to, čo práve nie je načítané. Stĺpec sa berie z bieleho zoznamu (názov
+stĺpca sa do SQL vkladá priamo, nedá sa naň naviazať parameter), prázdne hodnoty idú
+vždy dole.
+
+Na telefóne sa tabuľka rozpadne na **karty** (sedem stĺpcov sa na 360 px nezmestí),
+od 900 px je to tabuľka s klikateľnými hlavičkami.
 
 ## 7. Fázy realizácie
 
 | # | Fáza | Stav |
 |---|---|---|
-| 1 | Založenie projektu, DB schéma `admin` + `job`, migrácia 001 | 🟠 |
-| 1b | Dokumenty (CV) + AI posudzovanie + laboratórium modelov, migrácia 002 | 🟠 |
-| 1c | Hosting, databáza, deploy workflow, prvý admin | 🟠 |
-| 1d | React kostra: login, layout, dokumenty, preferencie | 🟠 |
+| 1 | Založenie projektu, DB schéma `admin` + `job`, migrácia 001 | ✅ |
+| 1b | Dokumenty (CV) + AI posudzovanie + laboratórium modelov, migrácia 002 | ✅ |
+| 1c | Hosting, databáza, deploy workflow, prvý admin | ✅ |
+| 1d | React kostra: login, layout, dokumenty, preferencie | ✅ |
+| 1e | Číselník modelov s cenami + poradie náhradných modelov, migrácia 004 | 🟠 |
+| 1f | Prompt `offer_parse` + kľúč. slová, technológie, odvetvie, migrácia 005 | 🟠 |
+| 1g | Laboratórium pre účel `parse` + vyhodnotenie zhody modelov | 🟠 |
+| 1h | Obrazovka ponúk s filtrami a radením (`/v1/offers` + `Ponuky.jsx`) | 🟠 |
 | 2 | Naplnenie číselníkov (lokality SK s GPS, profesie, mapovania portálov) | 🔲 |
 | 3 | Python scraper profesia.sk — zoznamy + detaily + HTML do `offer_content` | 🔲 |
 | 4 | Detekcia jazyka + preklad EN→SK do `offer_content` | 🔲 |
