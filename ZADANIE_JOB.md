@@ -351,6 +351,37 @@ Tabuľka ukáže, na ktorých poliach sa modely rozchádzajú — tam sa ladí p
 Víťaza zaradíš do **poradia** v sekcii Modely (`job.ai_poradie`).
 
 
+## 5c. Sledovanie nákladov
+
+Inšpirované `admin.livescore_log` z BetClubu: **jeden riadok = jedno volanie
+modelu nad jedným inzerátom**. Ku každému sa eviduje dátum stiahnutia, trvanie,
+použitý model, počet tokenov a cena.
+
+Sada je **dvakrát, oddelene pre každý účel** — sú to dve rôzne veci a nesmú sa
+sčítavať do jedného čísla:
+
+| Účel | Beží | Náklady rastú s |
+|---|---|---|
+| `parse` | **raz na inzerát** | počtom inzerátov |
+| `eval` | raz na **inzerát × používateľa** | počtom inzerátov aj používateľov |
+
+Pri jednom používateľovi sú približne 1:1; pri desiatich je `eval` desaťnásobne
+drahší pri rovnakom počte inzerátov. Porovnateľná medzi účelmi je preto až
+**cena na volanie**, nie celková suma.
+
+| Pohľad | Obsah |
+|---|---|
+| `job.v_naklady_zber` | riadok na inzerát: kedy stiahnutý, `fetch_ms`, model, tokeny, cena |
+| `job.v_naklady_vhodnost` | riadok na dvojicu inzerát + používateľ |
+| `job.v_naklady_porovnanie` | súhrn po dňoch, účeloch a modeloch |
+
+Cena sa ukladá **v čase volania** — cenníky sa menia a spätný prepočet by
+skresľoval históriu. Testovacie volania z laboratória sa do nákladov nerátajú
+(`call_type = 'live'` vs. `'test'`).
+
+Obrazovka **Náklady** (admin) ukazuje dve karty vedľa seba, rozpad na modely
+a detail s radením podľa stĺpca.
+
 ## 6. API endpointy (návrh)
 
 ```
@@ -385,7 +416,26 @@ POST   /api/v1/admin/ai-ciselnik?akcia=poradie  uložiť poradie { ucel, source_
 POST   /api/v1/admin/ai-ciselnik?akcia=model    zapnúť/vypnúť model { model_id, is_enabled }
 POST   /api/v1/admin/ai-ciselnik?akcia=rozpocet nastaviť denný strop { ucel, budget }
 POST   /api/v1/admin/ai-ciselnik?akcia=stav     zapnúť/vypnúť úlohu { ucel, is_enabled }
+
+GET    /api/v1/admin/naklady?dni=7             súhrn nákladov: zber vs. vhodnosť
+GET    /api/v1/admin/naklady?dni=7&ucel=parse  detail: riadok na volanie modelu
 ```
+
+### Spustenie zberu
+
+Zber je **dvojkrokový a oba kroky sa spúšťajú samostatne** — sťahovanie a
+ťaženie sa tak dajú opakovať nezávisle. Ťaženie sa dá zopakovať lepším promptom
+bez opätovného sťahovania z portálu.
+
+```
+python scraper/profesia.py --dni 1 --limit 20    # 1. stiahne HTML do DB
+php api/cron/zber.php --limit=20                 # 2. vyťaží údaje modelom
+```
+
+`--limit 0` znamená bez obmedzenia. Pri prvom behu sa oplatí obmedziť —
+prípadná chyba v ťažení sa prejaví na 20, nie na 500 inzerátoch.
+
+Lokálne, kde nie je PHP, nahrádza druhý krok `node tools/zber_test.cjs 20`.
 
 ### Obrazovka ponúk
 
@@ -421,8 +471,10 @@ od 900 px je to tabuľka s klikateľnými hlavičkami.
 | 1f2 | Prompt v2–v4 podľa testov, viac úväzkov naraz, migrácie 006–008 | ✅ |
 | 1g | Laboratórium pre účel `parse` + vyhodnotenie zhody modelov | ✅ |
 | 1h | Obrazovka ponúk s filtrami a radením (`/v1/offers` + `Ponuky.jsx`) | ✅ |
+| 1i | Sledovanie nákladov: metrika na inzerát + obrazovka Náklady, migrácie 009–010 | 🟠 |
 | 2 | Naplnenie číselníkov (lokality SK s GPS, profesie, mapovania portálov) | 🔲 |
-| 3 | Python scraper profesia.sk — zoznamy + detaily + HTML do `offer_content` | 🔲 |
+| 3 | Python scraper profesia.sk — zoznamy + detaily + HTML do `offer_content` | 🟠 |
+| 3b | Vyťaženie údajov modelom nad uloženým HTML (`api/cron/zber.php`) | 🟠 |
 | 4 | Detekcia jazyka + preklad EN→SK do `offer_content` | 🔲 |
 | 5 | Cron + `job.scrape_runs`, deaktivácia zmiznutých ponúk | 🔲 |
 | 6 | Manuálne spustenie zberu (portál + obdobie) | 🔲 |
