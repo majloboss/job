@@ -35,6 +35,9 @@ try {
         $path === 'v1/admin/ai-lab'    => require __DIR__ . '/v1/admin/ai_lab.php',
         $path === 'v1/admin/ai-naklady'=> require __DIR__ . '/v1/admin/ai_naklady.php',
 
+        // naklady na model: zber vs. vyhodnocovanie vhodnosti
+        $path === 'v1/admin/naklady'   => require __DIR__ . '/v1/admin/naklady.php',
+
         default => json_error('Neznámy endpoint: ' . $path, 404),
     };
 } catch (PDOException $e) {

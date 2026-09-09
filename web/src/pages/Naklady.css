@@ -1,0 +1,211 @@
+/* ============================================================
+   Naklady na model — zber vs. vyhodnocovanie vhodnosti.
+
+   Dve karty vedla seba su jadro obrazovky: porovnanie, kolko stoji
+   naplnenie DB a kolko vyhodnocovanie nad nou. Na telefone su pod sebou.
+   ============================================================ */
+
+.naklady { padding: 16px; max-width: 1200px; margin: 0 auto; }
+.naklady h1 { margin: 0 0 16px; font-size: 22px; }
+.naklady h2 {
+  margin: 24px 0 10px;
+  font-size: 17px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* --- vyber obdobia --- */
+.nak-obdobie {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.nak-obdobie button {
+  min-height: var(--dotyk);
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.nak-obdobie button.aktivny {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.nak-obnovit { margin-left: auto; background: var(--panel) !important; }
+.nak-obdobie button:disabled { opacity: .5; cursor: default; }
+
+.nak-chyba {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+  color: var(--bad);
+}
+.nak-prazdne { color: var(--muted); padding: 12px 0; }
+.nak-nic { color: var(--muted); }
+
+/* ============================================================
+   DVE KARTY — zber vs. vhodnost
+   ============================================================ */
+.nak-karty {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.nak-karta {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  background: var(--bg);
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.nak-karta:hover { border-color: var(--accent); }
+.nak-karta.vybrana {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.nak-karta h2 { margin: 0 0 4px; font-size: 18px; }
+.nak-popis { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+
+/* Cena je hlavne cislo karty — ma byt vidiet na prvy pohlad. */
+.nak-cena {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  margin-bottom: 12px;
+}
+.nak-cena-popis {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.nak-udaje {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+  margin: 0;
+  font-size: 14px;
+}
+.nak-udaje > div { display: contents; }
+.nak-udaje dt { color: var(--muted); }
+.nak-udaje dd { margin: 0; }
+.nak-podiel { color: var(--muted); font-size: 13px; }
+
+.nak-rozklik {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+/* --- stav naplnenia DB --- */
+.nak-stav {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  font-size: 14px;
+  color: var(--muted);
+}
+.nak-stav strong { color: var(--fg); }
+.nak-caka { color: var(--warn); }
+
+/* ============================================================
+   TABULKY
+   Vodorovne sa posuva IBA tabulka, nie cela stranka.
+   ============================================================ */
+.nak-obal { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.nak-tabulka {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  min-width: 700px;
+}
+.nak-tabulka th, .nak-tabulka td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+.nak-tabulka th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+.nak-tabulka th:hover  { color: var(--accent); }
+.nak-tabulka th.radene { color: var(--accent); }
+.nak-tabulka td.cislo, .nak-tabulka th.cislo { text-align: right; }
+.nak-tabulka tr.zle { background: color-mix(in srgb, var(--bad) 6%, transparent); }
+
+.nak-sipka { margin-left: 4px; font-size: 10px; }
+.nak-pocet { font-size: 13px; font-weight: 400; color: var(--muted); }
+
+.nak-model {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+/* Znacka ucelu — aby sa v spolocnej tabulke rozoznal zber od vhodnosti. */
+.nak-znacka {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+.nak-znacka.parse {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+.nak-znacka.eval {
+  background: color-mix(in srgb, var(--ok) 15%, transparent);
+  color: var(--ok);
+}
+
+.nak-zlyhalo {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: color-mix(in srgb, var(--bad) 15%, transparent);
+  color: var(--bad);
+}
+
+.nak-zadarmo { color: var(--ok); }
+
+.nak-skore {
+  display: inline-block;
+  min-width: 30px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  text-align: center;
+  font-weight: 600;
+  background: var(--panel);
+}
+.nak-skore.vhodne       { background: color-mix(in srgb, var(--ok) 18%, transparent);   color: var(--ok); }
+.nak-skore.menej_vhodne { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.nak-skore.nevhodne     { background: color-mix(in srgb, var(--bad) 14%, transparent);  color: var(--bad); }
+
+/* ============================================================
+   SIROKE DISPLEJE — karty vedla seba
+   ============================================================ */
+@media (min-width: 760px) {
+  .naklady { padding: 24px; }
+  .nak-karty { grid-template-columns: 1fr 1fr; gap: 16px; }
+}
