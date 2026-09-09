@@ -59,8 +59,11 @@ function htmlNaText(html) {
             `SELECT model_id, name, context_length FROM job.ai_models
               WHERE is_free AND is_enabled AND unavailable_reason IS NULL AND is_text_only
                 AND (context_length IS NULL OR context_length >= 16000)
-              ORDER BY COALESCE(agree_rate,-1) DESC, context_length DESC NULLS LAST
+              ORDER BY COALESCE(agree_rate,-1) DESC, model_id
               LIMIT $1`, [POCET]);
+        // Radenie ma na konci model_id, aby bola zostava medzi behmi
+        // ROVNAKA. Bez toho sa pri necom ako context_length DESC menilo
+        // poradie po kazdom prepocte statistiky a behy sa nedali porovnat.
         console.log(`Modelov na test: ${m.rows.length}`);
 
         // --- stiahni inzerat ---
@@ -88,10 +91,12 @@ function htmlNaText(html) {
                     body: JSON.stringify({
                         model: model.model_id,
                         messages: [{ role: 'user', content: prompt }],
-                        // 12000, nie 4000: reasoning modely ratuju do
-                        // max_tokens aj vnutorne uvazovanie a pri nizsom
-                        // strope vratia prazdny obsah (finish_reason 'length').
-                        temperature: 0, max_tokens: 12000,
+                        temperature: 0, max_tokens: 4000,
+                        // Vypnute uvazovanie — reasoning modely ho inak minu
+                        // naprazdno. Overene: 4000 tok./137 s/prazdne vs.
+                        // 655 tok./47 s/spravna odpoved. Rovnako to robi
+                        // or_call_model() v api/helpers/openrouter_fn.php.
+                        reasoning: { enabled: false },
                     }),
                 });
                 const ms = Date.now() - t0;

@@ -180,13 +180,31 @@ function or_build_prompt(string $template, string $prefsText, string $cvText, st
 // ------------------------------------------------------------
 // Zavola model a vrati rozparsovanu odpoved.
 // ------------------------------------------------------------
-function or_call_model(string $prompt, string $model, int $maxTokens = 1200): array {
-    $payload = json_encode([
+function or_call_model(string $prompt, string $model, int $maxTokens = 1200,
+                       bool $bezUvazovania = true): array {
+    $telo = [
         'model'       => $model,
         'messages'    => [['role' => 'user', 'content' => $prompt]],
         'temperature' => 0,
         'max_tokens'  => $maxTokens,
-    ], JSON_UNESCAPED_UNICODE);
+
+        // VYPNUTE UVAZOVANIE. Reasoning modely ratuju do max_tokens aj
+        // vnutorne uvazovanie a pri tazani udajov ho minu naprazdno:
+        // nex-n2.5-pro spotreboval 4000 aj 12000 tokenov a k odpovedi sa
+        // vobec nedostal (finish_reason 'length', prazdny obsah).
+        //
+        // Overene meranim na tom istom inzerate:
+        //   bez zasahu               4000 tok. / 137 s / prazdna odpoved
+        //   reasoning.enabled=false   655 tok. /  47 s / spravna odpoved
+        //
+        // Vytazenie udajov z inzeratu je prepis, nie uloha na premyslanie —
+        // uvazovanie tu nic nezlepsuje, len predrazuje a spomaluje.
+        // Modely bez reasoningu parameter ignoruju. Niektore ho vsak maju
+        // POVINNY a volanie odmietnu — vtedy sa opakuje bez neho, pozri nizsie.
+    ];
+    if ($bezUvazovania) $telo['reasoning'] = ['enabled' => false];
+
+    $payload = json_encode($telo, JSON_UNESCAPED_UNICODE);
 
     $started = microtime(true);
     $ch = curl_init(defined('OPENROUTER_URL') ? OPENROUTER_URL : 'https://openrouter.ai/api/v1/chat/completions');
@@ -219,7 +237,17 @@ function or_call_model(string $prompt, string $model, int $maxTokens = 1200): ar
 
     $ai = json_decode($resp, true);
     if ($code !== 200) {
-        $out['error']  = $ai['error']['message'] ?? ('HTTP ' . $code);
+        $chyba = $ai['error']['message'] ?? ('HTTP ' . $code);
+
+        // Niektore modely maju uvazovanie POVINNE a volanie s jeho vypnutim
+        // odmietnu ("Reasoning is mandatory for this endpoint and cannot be
+        // disabled"). Nie je to chyba modelu — skusi sa este raz bez toho
+        // parametra, s vyssim stropom, aby sa uvazovanie zmestilo.
+        if ($bezUvazovania && stripos($chyba, 'reasoning is mandatory') !== false) {
+            return or_call_model($prompt, $model, max($maxTokens, 12000), false);
+        }
+
+        $out['error']  = $chyba;
         $out['status'] = $code === 429 ? 'rate_limited' : 'failed';
         return $out;
     }
@@ -263,12 +291,11 @@ function or_evaluate(array $ctx, string $model): array {
     // Pri tazani udajov ('parse') moze byt odpoved dlha — obsahuje aj preklad
     // celeho inzeratu. 1200 tokenov by ju orezalo hned pri prvom dlhsom texte.
     //
-    // 12000 nie je preklep: REASONING MODELY (nex-n2.5-pro, dots-3-note)
-    // ratuju do max_tokens aj vnutorne uvazovanie. Pri strope 4000 minuli
-    // vsetko na uvazovanie a vratili finish_reason 'length' s prazdnym
-    // obsahom — vyzeralo to ako chyba promptu, pritom siel o limit.
+    // Strop 4000 staci, lebo or_call_model() vypina uvazovanie — inak by
+    // ho reasoning modely minuli naprazdno. Pri 'parse' je vyssi nez pri
+    // 'eval', lebo odpoved moze obsahovat aj preklad celeho inzeratu.
     $ucel = $ctx['ucel'] ?? 'eval';
-    $res = or_call_model($ctx['prompt'], $model, $ucel === 'parse' ? 12000 : 4000);
+    $res = or_call_model($ctx['prompt'], $model, $ucel === 'parse' ? 4000 : 1500);
     $d   = is_array($res['data']) ? $res['data'] : [];
 
     $num = static fn($v) => is_numeric($v) ? (int)$v : null;
