@@ -250,9 +250,17 @@ function ai_najlacnejsi(): ?array {
     return $r ?: null;
 }
 
-// PDO vracia boolean raz ako true, inokedy ako 't' alebo '1' podla ovladaca.
+// Boolean z PostgreSQL cez PDO. Tvar sa lisi podla ovladaca a nastavenia:
+// true, 't', 'true', '1', 1 — a pri emulovanych prepared statements aj
+// prazdny retazec pre FALSE. Porovnava sa preto zoznamom PRAVDIVYCH hodnot,
+// nie negaciou nepravdivych; neznamu hodnotu je bezpecnejsie brat ako false.
 function ai_je_true($v): bool {
-    return in_array($v, [true, 't', 'true', '1', 1], true);
+    if (is_bool($v)) return $v;
+    if (is_int($v))  return $v === 1;
+    if (is_string($v)) {
+        return in_array(strtolower($v), ['t', 'true', '1', 'y', 'yes', 'on'], true);
+    }
+    return false;
 }
 
 // ------------------------------------------------------------
@@ -364,9 +372,12 @@ function ai_po_volani(string $ucel, ?int $sourceId, bool $uspech,
          ON CONFLICT (ucel, source_id, den) DO UPDATE
             SET spent_usd    = job.ai_stav.spent_usd + EXCLUDED.spent_usd,
                 calls_count  = job.ai_stav.calls_count + 1,
-                fails_in_row = CASE WHEN ? THEN 0
+                -- ?::BOOLEAN, nie holy ?: v prepared statement PostgreSQL
+                -- neodvodi typ parametra vo WHEN a volanie zlyha. Cely INSERT
+                -- by potom neprebehol a riadok na dnesok by ostal nekompletny.
+                fails_in_row = CASE WHEN ?::BOOLEAN THEN 0
                                     ELSE job.ai_stav.fails_in_row + 1 END")
-        ->execute([$ucel, $sid, $cena, $uspech ? 0 : 1, $uspech ? 't' : 'f']);
+        ->execute([$ucel, $sid, $cena, $uspech ? 0 : 1, $uspech ? 'true' : 'false']);
 
     if ($uspech) return null;
 
