@@ -437,6 +437,26 @@ prípadná chyba v ťažení sa prejaví na 20, nie na 500 inzerátoch.
 
 Lokálne, kde nie je PHP, nahrádza druhý krok `node tools/zber_test.cjs 20`.
 
+Z aplikácie sa oba kroky spúšťajú na obrazovke **Zber** (admin) — výber portálu,
+obdobia a limitu, plus história behov s počtami, trvaním a cenou.
+
+### Spúšťanie procesov na Websupporte
+
+Poznatky z nasadenia, ktoré nie sú zrejmé a stáli čas:
+
+- **`shell_exec` a `exec` nič nevracajú**, hoci sú definované a nie sú
+  v `disable_functions`. Funguje `proc_open` **s poľom argumentov** — obchádza
+  shell. Rovnaký vzor už používa `doc_pdftotext()` na čítanie PDF.
+- **Python 3.10.12 na serveri je**, ale bez modulov `requests` a `psycopg2`.
+- **`HOME` procesu je `/tmp`**, takže `pip install --user` uloží knižnice do
+  `/tmp/.local`, ktorý sa pravidelne čistí — scraper by po čase prestal fungovať
+  bez varovania. Preto sa inštaluje cez `--target` do `api/pylibs` a scraperu sa
+  odovzdáva cez `PYTHONPATH`. Adresár je mimo gitu aj mimo FTP synchronizácie.
+- Scraper beží **na pozadí** (`proc_open` bez `proc_close`) — zber trvá minúty
+  a HTTP požiadavka by medzitým vypršala. Stav sa sleduje cez `job.scrape_runs`.
+- `scraper/.htaccess` so `Require all denied` — inak by bol zdrojový kód
+  verejne stiahnuteľný.
+
 ### Obrazovka ponúk
 
 `GET /api/v1/offers` obsluhuje **používateľa aj admina** — je to ten istý komponent
@@ -475,9 +495,9 @@ od 900 px je to tabuľka s klikateľnými hlavičkami.
 | 2 | Naplnenie číselníkov (lokality SK s GPS, profesie, mapovania portálov) | 🔲 |
 | 3 | Python scraper profesia.sk — zoznamy + detaily + HTML do `offer_content` | 🟠 |
 | 3b | Vyťaženie údajov modelom nad uloženým HTML (`api/cron/zber.php`) | 🟠 |
+| 6 | Ručné spustenie zberu — obrazovka Zber + `/v1/admin/zber` | 🟠 |
 | 4 | Detekcia jazyka + preklad EN→SK do `offer_content` | 🔲 |
 | 5 | Cron + `job.scrape_runs`, deaktivácia zmiznutých ponúk | 🔲 |
-| 6 | Manuálne spustenie zberu (portál + obdobie) | 🔲 |
 | 7 | PHP API: auth (prevzatý z BetClub) + `/offers` + `/codebooks` | 🔲 |
 | 8 | Napojenie posudzovania na zber: nové inzeráty -> `user_offer_match` | 🔲 |
 | 9 | React PWA: login, zoznam ponúk podľa vhodnosti, detail, preferencie | 🔲 |
