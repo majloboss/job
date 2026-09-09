@@ -5,6 +5,7 @@
 // POST ?akcia=spustit     spusti zber { source_id, dni, limit, bez_detailov }
 // POST ?akcia=vytazit     pusti model nad uz stiahnutymi inzeratmi { limit }
 // POST ?akcia=zrusit      oznaci bezuci beh za zruseny { run_id }
+// POST ?akcia=kniznice     doinstaluje Python kniznice pre scraper
 //
 // Zber je dvojkrokovy a oba kroky sa spustaju samostatne — stahovanie
 // a tazenie sa tak daju opakovat nezavisle. Tazenie sa da zopakovat
@@ -245,6 +246,64 @@ if ($akcia === 'zrusit') {
 
     if ($st->rowCount() === 0) json_error('Beh nebeží alebo neexistuje', 404);
     json_ok(['sprava' => 'Beh #' . $runId . ' označený za zrušený']);
+}
+
+// ------------------------------------------------------------
+// POST ?akcia=kniznice — doinstaluje Python kniznice pre scraper
+//
+// Instaluje sa cez --target do api/pylibs, NIE cez --user: HOME procesu
+// je na Websupporte /tmp, takze --user by kniznice ulozil do /tmp/.local,
+// ktory sa pravidelne cisti — a scraper by po case prestal fungovat bez
+// varovania. psycopg2-binary, nie psycopg2: ta vyzaduje prekladac
+// a hlavicky libpq, ktore na hostingu nie su.
+// ------------------------------------------------------------
+if ($akcia === 'kniznice') {
+    $python = zber_najdi_python();
+    if ($python === null) json_error('Na serveri nie je Python', 501);
+
+    $ciel = dirname(__DIR__, 2) . '/pylibs';
+    if (!is_dir($ciel) && !@mkdir($ciel, 0755, true)) {
+        json_error('Adresár ' . $ciel . ' sa nepodarilo vytvoriť', 500);
+    }
+
+    $prikaz = [$python, '-m', 'pip', 'install', '--target', $ciel, '--upgrade',
+               '--no-input', '--no-warn-script-location', 'requests', 'psycopg2-binary'];
+    $popis  = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+    $env    = ['HOME' => sys_get_temp_dir(), 'PATH' => '/usr/local/bin:/usr/bin:/bin'];
+
+    $proces = @proc_open($prikaz, $popis, $rury, null, $env);
+    if (!is_resource($proces)) json_error('pip sa nepodarilo spustiť', 500);
+
+    // Citanie musi byt neblokujuce: pip vypisuje vela a pri plnom pipe
+    // by proces cakal donekonecna.
+    stream_set_blocking($rury[1], false);
+    stream_set_blocking($rury[2], false);
+
+    $out = $err = '';
+    $koniec = time() + 240;
+    while (time() < $koniec) {
+        $out .= stream_get_contents($rury[1]);
+        $err .= stream_get_contents($rury[2]);
+        $stav = proc_get_status($proces);
+        if (!$stav['running']) break;
+        usleep(200000);
+    }
+    $out .= stream_get_contents($rury[1]);
+    $err .= stream_get_contents($rury[2]);
+    fclose($rury[1]);
+    fclose($rury[2]);
+    $kod = proc_close($proces);
+
+    $hotovo = zber_kniznice_su();
+    json_ok([
+        'ok'     => $hotovo,
+        'kod'    => $kod,
+        'vystup' => mb_substr(trim($out), -600),
+        'chyba'  => mb_substr(trim($err), -400),
+        'sprava' => $hotovo
+            ? 'Knižnice nainštalované — zber sa dá spúšťať zo servera'
+            : 'Inštalácia neprešla, pozri výstup',
+    ]);
 }
 
 json_error('Neznáma akcia: ' . $akcia, 400);

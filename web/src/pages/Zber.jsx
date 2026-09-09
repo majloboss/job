@@ -90,12 +90,17 @@ export default function Zber() {
       {chyba  && <p className="zb-chyba">{chyba}</p>}
       {sprava && <p className="zb-sprava">{sprava}</p>}
 
-      {/* Bez Pythonu na serveri sa zber musí spúšťať z príkazového riadka. */}
+      {/* Bez knižníc sa zber zo servera spustiť nedá. Doinštalovať sa dajú
+          rovno tu — na hostingu sa môžu stratiť pri zmene prostredia. */}
       {dta && !maPython && (
         <div className="zb-upozornenie">
-          <strong>Na serveri nie je pripravený Python.</strong> Zber sa dá spustiť
-          z príkazového riadka:
+          <strong>Na serveri nie sú pripravené Python knižnice.</strong>{' '}
+          Skús ich doinštalovať, alebo spusti zber z príkazového riadka:
           <pre>python scraper/profesia.py --dni {dni} --limit {limit}</pre>
+          <button className="zb-spustit" onClick={() => akcia('kniznice', {})}
+                  disabled={pracuje}>
+            {pracuje ? 'Inštalujem…' : 'Doinštalovať knižnice'}
+          </button>
         </div>
       )}
 
