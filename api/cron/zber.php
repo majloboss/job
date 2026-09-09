@@ -40,9 +40,11 @@ require_once $BASE . '/helpers/openrouter_fn.php';
 // ------------------------------------------------------------
 $limit   = 0;
 $offerId = 0;
+$znova   = false;
 foreach ($argv as $a) {
     if (preg_match('/^--limit=(\d+)$/', $a, $m)) $limit   = (int)$m[1];
     if (preg_match('/^--offer=(\d+)$/', $a, $m)) $offerId = (int)$m[1];
+    if ($a === '--znova') $znova = true;
 }
 
 $pdo = db();
@@ -62,14 +64,20 @@ if ($offerId) {
           WHERE o.id = ?');
     $st->execute([$offerId]);
 } else {
+    // Standardne inzeraty bez uspesneho vytazenia. S --znova aj tie, ktorym
+    // chyba suhrn napriek uspesnemu volaniu — vysledok sa do inzeratu
+    // nezapisal (starsia chyba vo vyhodnoteni uspechu).
+    $podmienka = $znova
+        ? "(o.summary_sk IS NULL)"
+        : "NOT EXISTS (SELECT 1 FROM job.ai_evaluations e
+                        WHERE e.offer_id = o.id AND e.ucel = 'parse' AND e.status = 'ok')";
+
     $sql =
         "SELECT o.id, o.external_id, o.url, o.source_id, c.text_full
            FROM job.offers o
            JOIN job.offer_content c ON c.offer_id = o.id AND c.is_original
           WHERE o.detail_fetched_at IS NOT NULL
-            AND NOT EXISTS (
-                SELECT 1 FROM job.ai_evaluations e
-                 WHERE e.offer_id = o.id AND e.ucel = 'parse' AND e.status = 'ok')
+            AND $podmienka
           ORDER BY o.created_at";
     if ($limit > 0) $sql .= ' LIMIT ' . $limit;
     $st = $pdo->query($sql);

@@ -79,8 +79,9 @@ export default function Zber() {
     }
   }
 
-  const stav    = dta?.stav;
-  const caka    = dta?.caka ?? 0;
+  const stav      = dta?.stav;
+  const caka      = dta?.caka ?? 0;
+  const neuplnych = dta?.neuplnych ?? 0;
   const maPython = dta?.python;
 
   return (
@@ -185,11 +186,24 @@ export default function Zber() {
           <p className="zb-popis">Všetky stiahnuté inzeráty sú vyťažené.</p>
         )}
 
-        <button className="zb-spustit"
-                onClick={() => akcia('vytazit', { limit: Math.min(caka || 20, 100) })}
-                disabled={pracuje || caka === 0}>
-          {pracuje ? 'Spúšťam…' : `Vyťažiť (${Math.min(caka || 0, 100)})`}
-        </button>
+        <div className="zb-tlacidla">
+          <button className="zb-spustit"
+                  onClick={() => akcia('vytazit', { limit: Math.min(caka || 20, 100) })}
+                  disabled={pracuje || caka === 0}>
+            {pracuje ? 'Spúšťam…' : `Vyťažiť (${Math.min(caka || 0, 100)})`}
+          </button>
+
+          {/* Inzeráty, kde model odpovedal, ale údaje sa nezapísali. Bežné
+              ťaženie ich preskakuje — majú úspešné volanie. */}
+          {neuplnych > 0 && (
+            <button className="zb-opakovat"
+                    onClick={() => akcia('vytazit', { limit: neuplnych, znova: true })}
+                    disabled={pracuje}
+                    title="Model odpovedal, ale údaje sa do inzerátu nezapísali">
+              Doplniť neúplné ({neuplnych})
+            </button>
+          )}
+        </div>
       </section>
 
       {/* --- história behov --- */}

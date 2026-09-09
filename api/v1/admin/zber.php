@@ -46,10 +46,21 @@ if ($method === 'GET') {
                 COUNT(*) FILTER (WHERE summary_sk IS NOT NULL) AS vytazenych
            FROM job.offers WHERE is_active")->fetch();
 
+    // Inzeraty s uspesnym volanim modelu, ale bez zapisaneho suhrnu. Bezny
+    // dotaz "co treba vytazit" ich preskakuje (uspesnu evaluaciu maju),
+    // takze by inak zostali navzdy neuplne.
+    $neuplnych = (int)$pdo->query(
+        "SELECT COUNT(*) FROM job.offers o
+          WHERE o.detail_fetched_at IS NOT NULL AND o.summary_sk IS NULL
+            AND EXISTS (SELECT 1 FROM job.ai_evaluations e
+                         WHERE e.offer_id = o.id AND e.ucel = 'parse'
+                           AND e.status = 'ok')")->fetchColumn();
+
     json_ok([
-        'behy'    => $behy,
-        'caka'    => $caka,
-        'stav'    => $stav,
+        'behy'      => $behy,
+        'caka'      => $caka,
+        'neuplnych' => $neuplnych,
+        'stav'      => $stav,
         'portaly' => $pdo->query(
             'SELECT id, code, name, default_period_days
                FROM job.sources WHERE is_active ORDER BY name')->fetchAll(),
@@ -207,6 +218,13 @@ if ($akcia === 'spustit') {
 if ($akcia === 'vytazit') {
     $limit = max(1, min(200, (int)($vstup['limit'] ?? 20)));
 
+    // Znova aj tie, ktorym chyba suhrn, hoci volanie skoncilo ako 'ok'.
+    // Vzniklo to starsou chybou: model odpovedal spravne, ale vysledok sa
+    // vyhodnotil ako neuspech a do inzeratu sa nezapisal. Bez tohto by taky
+    // inzerat uz nikdy nikto nedotiahol — dotaz "co treba vytazit" ho
+    // preskakuje prave preto, ze uspesnu evaluaciu ma.
+    $znova = !empty($vstup['znova']);
+
     $php = null;
     foreach (['/usr/bin/php', '/usr/local/bin/php', '/opt/php/bin/php', PHP_BINARY] as $c) {
         if ($c && is_executable($c)) { $php = $c; break; }
@@ -220,7 +238,9 @@ if ($akcia === 'vytazit') {
 
     $log = sys_get_temp_dir() . '/job_vytazenie.log';
     $popis = [1 => ['file', $log, 'w'], 2 => ['file', $log, 'a']];
-    $proces = @proc_open([$php, $skript, '--limit=' . $limit], $popis, $rury);
+    $args  = [$php, $skript, '--limit=' . $limit];
+    if ($znova) $args[] = '--znova';
+    $proces = @proc_open($args, $popis, $rury);
 
     if (!is_resource($proces)) json_error('Ťaženie sa nepodarilo spustiť', 500);
 

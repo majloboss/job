@@ -206,3 +206,19 @@
   .zber { padding: 24px; }
   .zb-nastavenia label { flex: 0 1 180px; }
 }
+
+/* Tlacidla kroku 2 — vedla seba, na mobile pod sebou. */
+.zb-tlacidla { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Doplnenie neuplnych vytazkov je oprava, nie bezna akcia — preto tlmene. */
+.zb-opakovat {
+  min-height: var(--dotyk);
+  padding: 0 16px;
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--warn);
+  font: inherit;
+  cursor: pointer;
+}
+.zb-opakovat:disabled { opacity: .45; cursor: default; }
