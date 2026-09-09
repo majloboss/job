@@ -38,6 +38,9 @@ try {
         // naklady na model: zber vs. vyhodnocovanie vhodnosti
         $path === 'v1/admin/naklady'   => require __DIR__ . '/v1/admin/naklady.php',
 
+        // docasna diagnostika: je na hostingu Python pre scraper?
+        $path === 'v1/admin/diag-python' => require __DIR__ . '/v1/admin/diag_python.php',
+
         default => json_error('Neznámy endpoint: ' . $path, 404),
     };
 } catch (PDOException $e) {
