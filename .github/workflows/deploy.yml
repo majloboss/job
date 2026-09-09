@@ -112,3 +112,20 @@ jobs:
             **/config/mail.php
             uploads/**
             setup_once.php
+            pylibs/**
+
+      # Python scraper. Kniznice (api/pylibs) sa nenahravaju — instaluju sa
+      # priamo na serveri cez pip --target a v repe nie su.
+      - name: Deploy scraper via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: fellow.sk
+          username: ftp.fellow.sk
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: scraper/
+          server-dir: /sub/job/scraper/
+          state-name: .ftp-deploy-sync-job-scraper.json
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/__pycache__/**

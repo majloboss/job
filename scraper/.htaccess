@@ -1,0 +1,4 @@
+# Scraper sa spusta z prikazoveho riadka alebo cez proc_open z API,
+# nikdy nie cez web. Zdrojak by inak bol verejne stiahnutelny — a je
+# v nom aj cesta ku konfiguracii s heslom do databazy.
+Require all denied
