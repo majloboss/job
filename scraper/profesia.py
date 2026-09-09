@@ -66,7 +66,31 @@ def nacitaj_db_config():
 
     return dict(host=hodnota("DB_HOST"), port=int(hodnota("DB_PORT")),
                 dbname=hodnota("DB_NAME"), user=hodnota("DB_USER"),
-                password=hodnota("DB_PASS"), sslmode="require")
+                password=hodnota("DB_PASS"))
+
+
+def pripoj_db():
+    """
+    Pripojenie k DB, ktore funguje z hostingu aj z domaceho pocitaca.
+
+    Na Websupporte sa db.r5.websupport.sk zo servera preklada na 127.0.0.1
+    a take lokalne spojenie SSL NEPODPORUJE ("server does not support SSL,
+    but SSL was required"). Zvonku je naopak SSL povinne.
+
+    Skusa sa preto najprv sslmode=require (bezpecnejsie, plati zvonku)
+    a pri odmietnutí sa prejde na prefer. Poradie je zamerne: keby sa
+    zacalo od prefer, spojenie zvonku by mohlo tiche prejst bez sifrovania.
+    """
+    conf = nacitaj_db_config()
+    posledna = None
+    for rezim in ("require", "prefer"):
+        try:
+            return psycopg2.connect(sslmode=rezim, **conf)
+        except psycopg2.OperationalError as e:
+            posledna = e
+            if "does not support SSL" not in str(e):
+                raise      # ina chyba (zle heslo, siet) — nema zmysel skusat dalej
+    raise posledna
 
 
 # ============================================================
@@ -258,6 +282,26 @@ def uloz_detail(cur, offer_id, html_text, fetch_ms=None, fetch_bytes=None):
     return len(text)
 
 
+# ------------------------------------------------------------
+# Oznaci beh za zlyhany. Vola sa vtedy, ked hlavne spojenie neexistuje
+# alebo sa uz nepouziva — inak by beh zalozeny v PHP zostal "running"
+# a blokoval by spustenie dalsieho zberu.
+# ------------------------------------------------------------
+def oznac_beh_zlyhany(run_id, dovod):
+    try:
+        c = pripoj_db()
+        c.autocommit = True
+        with c.cursor() as cur:
+            cur.execute("""
+                UPDATE job.scrape_runs
+                   SET status = 'failed', finished_at = NOW(), error_message = %s
+                 WHERE id = %s AND status = 'running'
+            """, (str(dovod)[:500], run_id))
+        c.close()
+    except Exception:
+        pass      # ked ani toto neprejde, uz sa nic viac spravit neda
+
+
 # ============================================================
 # Hlavny beh
 # ============================================================
@@ -272,7 +316,15 @@ def main():
                     help="len zoznamy, detaily nestahovat")
     args = ap.parse_args()
 
-    conn = psycopg2.connect(**nacitaj_db_config())
+    # Ked pripojenie zlyha, beh zalozeny v PHP by zostal navzdy "running"
+    # a blokoval by spustenie dalsieho. Stav sa preto prepise samostatnym
+    # spojenim — to uz vieme nadviazat, lebo sme sa dostali za pripojenie.
+    try:
+        conn = pripoj_db()
+    except Exception as e:
+        if args.run_id:
+            oznac_beh_zlyhany(args.run_id, "Pripojenie k DB zlyhalo: %s" % e)
+        raise
     conn.autocommit = False
     cur = conn.cursor()
 

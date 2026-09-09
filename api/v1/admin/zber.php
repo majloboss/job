@@ -104,15 +104,25 @@ if ($akcia === 'spustit') {
     $zdroj = $st->fetch();
     if (!$zdroj) json_error('Portál sa nenašiel alebo nie je aktívny', 400);
 
-    // Dva behy naraz by sa bili o rovnake inzeraty a zbytocne zatazovali
-    // portal. Beh starsi nez hodinu sa povazuje za zaseknuty.
-    $bezi = $pdo->prepare(
+    // Zaseknute behy: proces mohol spadnut skor, nez stihol prepisat stav
+    // (napr. pri chybe pripojenia). Taky beh by inak blokoval spustenie
+    // dalsieho donekonecna. Zber s odstupom 1,5 s na poziadavku a limitom
+    // 1000 inzeratov trva najviac desiatky minut — po 30 minutach je beh
+    // takmer isto mrtvy.
+    $pdo->exec(
+        "UPDATE job.scrape_runs
+            SET status = 'failed', finished_at = NOW(),
+                error_message = COALESCE(error_message,
+                    'Beh neodpovedal viac než 30 minút — považovaný za zaseknutý')
+          WHERE status = 'running' AND started_at < NOW() - INTERVAL '30 minutes'");
+
+    // Dva behy naraz by sa bili o rovnake inzeraty a zbytocne zatazovali portal.
+    $bezi = $pdo->query(
         "SELECT id, started_at FROM job.scrape_runs
-          WHERE status = 'running' AND started_at > NOW() - INTERVAL '1 hour'
-          LIMIT 1");
-    $bezi->execute();
-    if ($r = $bezi->fetch()) {
-        json_error('Zber už beží (beh #' . $r['id'] . '). Počkaj, kým dobehne.', 409);
+          WHERE status = 'running' LIMIT 1")->fetch();
+    if ($bezi) {
+        json_error('Zber už beží (beh #' . $bezi['id'] . '). Počkaj, kým dobehne, '
+                 . 'alebo ho zruš v histórii.', 409);
     }
 
     $st = $pdo->prepare(
