@@ -43,6 +43,7 @@ try {
 
         // docasna diagnostika: je na hostingu Python pre scraper?
         $path === 'v1/admin/diag-python' => require __DIR__ . '/v1/admin/diag_python.php',
+        $path === 'v1/admin/diag-log'    => require __DIR__ . '/v1/admin/diag_log.php',
 
         default => json_error('Neznámy endpoint: ' . $path, 404),
     };
