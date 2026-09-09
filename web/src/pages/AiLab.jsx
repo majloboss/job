@@ -374,8 +374,8 @@ export default function AiLab() {
                         {ucel === 'parse'
                           ? (r.ok
                               ? <span className="lab-znacka vhodne">
-                                  {r.parsed?.title
-                                    ? skrat(r.parsed.title, 40) : 'vyťažené'}
+                                  {r.parsed?.profession
+                                    ? skrat(r.parsed.profession, 40) : 'vyťažené'}
                                 </span>
                               : <span className="lab-zlyhalo">{popisChyby(r.status)}</span>)
                           : (r.bucket
@@ -504,11 +504,15 @@ function Detail({ r, ucel }) {
       <div className="lab-detail-blok">
         <h4>Vyťažené z inzerátu</h4>
         <dl className="lab-vytazene">
-          {jeParse && <div><dt>Názov</dt><dd>{p.title ?? '—'}</dd></div>}
-          {jeParse && <div><dt>Firma</dt><dd>{p.company_name ?? '—'}</dd></div>}
+          {/* Nazov pozicie a firmy model od verzie 4 promptu nevracia —
+              berie ich scraper priamo z HTML. */}
           <div><dt>Profesia</dt><dd>{p.profession ?? '—'}</dd></div>
           {jeParse && <div><dt>Odvetvie</dt><dd>{p.industry ?? '—'}</dd></div>}
-          <div><dt>Úväzok</dt><dd>{p.employment_type ?? '—'}</dd></div>
+          {/* Inzerat casto ponuka viac uvazkov naraz ("plny uvazok, na dohodu"). */}
+          <div><dt>Úväzok</dt>
+            <dd>{p.employment_types?.length
+                  ? p.employment_types.join(', ')
+                  : (p.employment_type ?? '—')}</dd></div>
           <div><dt>Miesto</dt><dd>{(p.locations || []).join(', ') || '—'}</dd></div>
           <div><dt>Mzda</dt>
             <dd>{p.salary_min || p.salary_max
@@ -566,8 +570,8 @@ function Zoznam({ nadpis, polozky }) {
 // ked sa jeden lisi vo vsetkom, je nepouzitelny.
 // ------------------------------------------------------------
 const POPIS_POLA = {
-  title: 'Názov pozície', salary_min: 'Mzda od', salary_max: 'Mzda do',
-  salary_period: 'Obdobie mzdy', company_name: 'Firma', employment_type: 'Úväzok',
+  profession: 'Profesia', salary_min: 'Mzda od', salary_max: 'Mzda do',
+  salary_period: 'Obdobie mzdy', employment_types: 'Úväzok',
   is_agency: 'Agentúra', remote_type: 'Režim', seniority: 'Úroveň',
   orig_lang: 'Jazyk', locations: 'Miesto', positions_count: 'Počet miest',
   industry: 'Odvetvie', technologies: 'Technológie',

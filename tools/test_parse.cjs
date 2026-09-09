@@ -104,13 +104,15 @@ function htmlNaText(html) {
                 const zhoda = obsah.match(/\{[\s\S]*\}/);
                 const data = zhoda ? JSON.parse(zhoda[0]) : null;
 
-                if (!data?.title) {
-                    console.log(`bez nazvu (${(ms/1000).toFixed(1)} s)`);
+                // Nazov pozicie model od promptu v4 nevracia (berie ho
+                // scraper z HTML), takze uspech sa meria suhrnom a profesiou.
+                if (!data?.summary_sk || !data?.profession) {
+                    console.log(`neuplne (${(ms/1000).toFixed(1)} s)`);
                     vysledky.push({ model: model.model_id, ok: false });
                     continue;
                 }
 
-                console.log(`OK "${data.title.slice(0, 40)}" ${(ms/1000).toFixed(1)} s`);
+                console.log(`OK "${data.profession.slice(0, 40)}" ${(ms/1000).toFixed(1)} s`);
                 vysledky.push({ model: model.model_id, ok: true, data, ms,
                                 tokens: j.usage?.total_tokens });
             } catch (e) {
@@ -124,8 +126,8 @@ function htmlNaText(html) {
         console.log(`\nUspesnych: ${uspesne.length} z ${vysledky.length}\n`);
         if (uspesne.length < 2) return;
 
-        const POLIA = ['title', 'company_name', 'salary_min', 'salary_max', 'salary_period',
-                       'employment_type', 'is_agency', 'industry', 'orig_lang',
+        const POLIA = ['profession', 'salary_min', 'salary_max', 'salary_period',
+                       'employment_type', 'employment_types', 'is_agency', 'industry', 'orig_lang',
                        'remote_type', 'locations', 'technologies'];
 
         for (const pole of POLIA) {

@@ -236,10 +236,11 @@ aj keď portál zmení štruktúru stránky.
 |---|---|
 | portál, URL, externé ID | **scraper** — vie ich isto, do promptu nejdú |
 | originálny text a HTML | **scraper** — ukladá sa tak, ako bol na zdroji |
-| názov pozície, firma, agentúra áno/nie | model |
+| **názov pozície a názov firmy** | **scraper** z HTML (`h1`, meta) — presné reťazce zo stránky |
+| agentúra áno/nie, profesia | model |
 | dátum a čas zverejnenia (`published_at` + doslovný text) | model |
 | mzda (od/do, mena, obdobie) a doslovný text mzdy | model |
-| úväzok, réžim (onsite/hybrid/remote), úroveň, vzdelanie, nástup | model |
+| **úväzky** (`employment_types` — môže ich byť viac naraz), réžim, úroveň, vzdelanie, nástup | model |
 | lokality výkonu práce, jazyky s úrovňou | model |
 | **kľúčové slová** náplne práce (5–15) | model |
 | **technológie**, nástroje, stroje, certifikáty | model |
@@ -252,6 +253,38 @@ Relatívny čas („Pred 2 dňami") model **neprepočítava** — vráti ho dosl
 
 Kľúčové slová sa medzi modelmi zámerne **neporovnávajú** pri vyhodnocovaní zhody —
 každý model ich formuluje inak a zhoda by bola náhodná.
+
+**Inzerát môže ponúkať viac úväzkov naraz.** Profesia.sk bežne uvádza napr.
+„plný úväzok, na dohodu (brigády)" — preto `job.offers.employment_types` (pole,
+s GIN indexom) a `employment_type` ako hlavný typ pre jednoduché filtre. Filter
+na úväzok hľadá v celom poli, takže nájde aj inzerát, kde je hľadaný typ druhý
+v poradí.
+
+### Čo ukázali prvé testy promptu
+
+Testovanie na reálnom inzeráte ([tools/test_parse.cjs](tools/test_parse.cjs))
+odhalilo tri veci, ktoré by sa inak prejavili až v produkcii:
+
+1. **Zástupné znaky `<...>` vo vzorovom JSON-e slabšie modely kopírovali do
+   výstupu** (`"required": <true|false>` → nevalidný JSON). Silnejšie modely to
+   pochopili správne, takže chyba by sa objavila až pri prepnutí na náhradný
+   model. Verzia 2 promptu preto ukazuje **vzorový JSON s reálnymi hodnotami**,
+   nie schému.
+2. **Modely hádali neuvedené údaje.** Doplnené pravidlo, že sa vracia `null`.
+3. **Rozpor, ktorý bol chybou dátového modelu, nie modelov** — pozri úväzky vyššie.
+   Preto sa oplatí pri rozpore najprv overiť pôvodný inzerát.
+4. **Slabšie modely komolia slovenčinu.** `ling-3.0-flash-fin` vrátil
+   „čačníka/čačníčku" namiesto „čašníka", `ling-3.0-flash-sante` „párovinie vína",
+   `nex-n2.5-mini` „degutačné menu". Skomolený názov by skončil v databáze
+   a vo vyhľadávaní — a pri vyhodnocovaní zhody by prešiel bez povšimnutia,
+   lebo názov sa porovnáva ako celok a preklep vyzerá len ako iná hodnota.
+   **Preto od verzie 4 promptu model názov pozície ani firmy nevracia** —
+   sú to presné reťazce zo stránky a berie ich scraper z HTML. Model ráta len
+   to, čo sa musí odvodiť (mzda, úväzky, kľúčové slová, súhrn, preklad).
+   Odstraňuje to celú triedu chyby namiesto jej detekcie.
+
+**Úspešnosť naprieč verziami promptu** (ten istý inzerát, bezplatné modely):
+v1 → 2/6, v2 → 4/8, v3 → 5/8.
 
 ### Dva kroky získavania údajov
 
@@ -376,6 +409,7 @@ od 900 px je to tabuľka s klikateľnými hlavičkami.
 | 1d | React kostra: login, layout, dokumenty, preferencie | ✅ |
 | 1e | Číselník modelov s cenami + poradie náhradných modelov, migrácia 004 | 🟠 |
 | 1f | Prompt `offer_parse` + kľúč. slová, technológie, odvetvie, migrácia 005 | 🟠 |
+| 1f2 | Prompt v2–v4 podľa testov, viac úväzkov naraz, migrácie 006–008 | 🟠 |
 | 1g | Laboratórium pre účel `parse` + vyhodnotenie zhody modelov | 🟠 |
 | 1h | Obrazovka ponúk s filtrami a radením (`/v1/offers` + `Ponuky.jsx`) | 🟠 |
 | 2 | Naplnenie číselníkov (lokality SK s GPS, profesie, mapovania portálov) | 🔲 |

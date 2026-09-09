@@ -316,19 +316,23 @@ function or_evaluate(array $ctx, string $model): array {
     // Modely, ktore nikdy nebudu fungovat, sa vyradia zo zoznamu — aby
     // nezdrzovali kazdy dalsi beh. Tyka sa to len trvalych prekazok, nie
     // docasnych (limit poziadaviek, vypadok siete).
-    $trvale = or_trvalo_nedostupny($res['error']);
-    if ($trvale !== null) {
-        db()->prepare(
-            'UPDATE job.ai_models
-                SET is_enabled = FALSE, last_error = ?, updated_at = NOW()
-              WHERE model_id = ?')->execute([$trvale, $model]);
-    }
+    //
+    // Vyraduje sa cez ai_vyrad_model(), ktora nastavi aj unavailable_reason.
+    // Samotny last_error by nestacil: vyber modelu sa riadi prave tym
+    // stlpcom, takze model by sa napriek "vyradeniu" dalej ponukal.
+    $trvale = ai_trvala_chyba($res['error']);
+    if ($trvale !== null) ai_vyrad_model($model, $trvale);
 
     // Uspech znamena pri kazdom ucele nieco ine: pri posudzovani vhodnosti
-    // musi prist skore, pri tazani udajov aspon nazov pozicie. Model, ktory
+    // musi prist skore, pri tazani udajov suhrn a profesia. Model, ktory
     // vrati prazdny JSON, "odpovedal" — pouzitelny vsak nie je.
+    //
+    // Nazov pozicie sa uz neposudzuje: od promptu v4 ho model nevracia,
+    // berie ho scraper priamo z HTML (modely ho komolili).
     $ok = $res['status'] === 'ok'
-        && ($ucel === 'parse' ? !empty($d['title']) : $score !== null);
+        && ($ucel === 'parse'
+            ? (!empty($d['summary_sk']) && !empty($d['profession']))
+            : $score !== null);
 
     return [
         'id'      => (int)$st->fetchColumn(),
@@ -352,45 +356,14 @@ function or_evaluate(array $ctx, string $model): array {
 
 // Je chyba trvala, teda nema zmysel model skusat znova?
 //
-// Vracia zrozumitelny dovod, alebo null pri docasnej chybe. Rozlisenie je
-// podstatne: limit poziadaviek za minutu alebo vypadok siete prejde, kdezto
-// model dostupny len agentickym nastrojom nebude fungovat nikdy.
+// Rozhodovanie sa presunulo do ai_trvala_chyba() v ai_modely_fn.php, aby
+// existovalo na jednom mieste — dve kopie by sa casom rozisli a model by
+// sa podla jednej vyradil a podla druhej nie. Tato funkcia zostava len
+// ako nazov, na ktory sa odkazuje starsi kod.
 function or_trvalo_nedostupny(?string $chyba): ?string {
-    if ($chyba === null || $chyba === '') return null;
-    $c = mb_strtolower($chyba);
-
-    // Docasne prekazky maju prednost: poskytovatel vracia pri vycerpanom
-    // dennom limite aj hlasky, ktore inak vyzeraju ako trvale. Model, ktory
-    // zajtra pobezi, sa nesmie vyradit natrvalo.
-    foreach (['rate limit', 'rate-limited', 'temporarily', 'overloaded',
-              'try again', 'retry', 'timeout', 'resourceexhausted'] as $docasne) {
-        if (str_contains($c, $docasne)) return null;
-    }
-
-    $trvale = [
-        'agentic harness'      => 'Model je dostupný len agentickým nástrojom, nie cez API',
-        'no endpoints found'   => 'Model nemá dostupný endpoint',
-        'is not a valid model' => 'Model už neexistuje',
-        'unavailable for free' => 'Model už nie je bezplatný',
-        'requires more credits'=> 'Model vyžaduje kredit',
-        'data policy'          => 'Model blokuje nastavenie ochrany údajov na účte',
-    ];
-    foreach ($trvale as $vzor => $popis) {
-        if (str_contains($c, $vzor)) return $popis;
-    }
-    return null;
+    return ai_trvala_chyba($chyba);
 }
 
-// Prepocita suhrnnu statistiku modelu v ciselniku.
-function or_update_model_stats(string $model): void {
-    db()->prepare(
-        "UPDATE job.ai_models m SET
-            lab_runs = s.total, lab_ok = s.ok, avg_ms = s.avg_ms,
-            last_tested_at = s.last_at, updated_at = NOW()
-         FROM (SELECT COUNT(*) AS total,
-                      COUNT(*) FILTER (WHERE status = 'ok' AND score IS NOT NULL) AS ok,
-                      ROUND(AVG(took_ms))::INT AS avg_ms,
-                      MAX(created_at) AS last_at
-                 FROM job.ai_evaluations WHERE model_id = ?) s
-         WHERE m.model_id = ?")->execute([$model, $model]);
-}
+// Statistiku modelu prepocitava ai_prepocitaj_statistiku() v
+// ai_modely_fn.php — okrem uspesnosti rata aj zhodu s ostatnymi modelmi,
+// co je pri tazani udajov hlavne kriterium vyberu.

@@ -60,8 +60,9 @@ if (!empty($_GET['id'])) {
     $st->execute([(int)$offer['id']]);
     $offer['locations'] = $st->fetchAll();
 
-    $offer['keywords']     = pg_pole($offer['keywords']);
-    $offer['technologies'] = pg_pole($offer['technologies']);
+    $offer['keywords']         = pg_pole($offer['keywords']);
+    $offer['technologies']     = pg_pole($offer['technologies']);
+    $offer['employment_types'] = pg_pole($offer['employment_types']);
 
     // Adminovi navyse: cim a za kolko sa inzerat vytazil.
     if ($jeAdmin) {
@@ -107,8 +108,12 @@ if (!empty($_GET['industry'])) {
     $args[] = $_GET['industry'];
 }
 
+// Hlada sa vo VSETKYCH ponukanych uvazkoch, nie len v hlavnom: inzerat
+// casto ponuka "plny uvazok, na dohodu" a filter na dohodu ho musi najst
+// aj vtedy, ked je dohoda az druha v poradi.
 if (!empty($_GET['employment_type'])) {
-    $kde[] = 'o.employment_type = ?';
+    $kde[] = '(o.employment_types @> ARRAY[?]::TEXT[] OR o.employment_type = ?)';
+    $args[] = $_GET['employment_type'];
     $args[] = $_GET['employment_type'];
 }
 
@@ -183,7 +188,7 @@ $where = implode(' AND ', $kde);
 $sql = "SELECT o.id, o.external_id, o.url, o.title, o.title_sk, o.summary_sk,
                o.company_name_raw, o.is_agency_offer, o.industry,
                o.salary_raw, o.salary_min, o.salary_max, o.salary_currency,
-               o.salary_period, o.employment_type, o.remote_type, o.seniority,
+               o.salary_period, o.employment_type, o.employment_types, o.remote_type, o.seniority,
                o.keywords, o.technologies, o.orig_lang,
                o.published_at, o.published_at_raw, o.created_at, o.last_seen_at,
                s.name AS source_name, s.code AS source_code,
@@ -200,7 +205,8 @@ $st->execute(array_merge([$auth['user_id']], $args));
 $offers = $st->fetchAll();
 
 foreach ($offers as &$o) {
-    $o['keywords']        = pg_pole($o['keywords']);
+    $o['keywords']         = pg_pole($o['keywords']);
+    $o['employment_types'] = pg_pole($o['employment_types']);
     $o['technologies']    = pg_pole($o['technologies']);
     $o['is_agency_offer'] = $o['is_agency_offer'] === null
                           ? null : ai_je_true_offers($o['is_agency_offer']);

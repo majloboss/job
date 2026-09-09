@@ -17,12 +17,18 @@
 // pouzivatel rozhoduje. Zoznamy (locations, languages) sa porovnavaju ako
 // mnoziny, poradie v nich nic neznamena.
 const AI_ZHODA_POLIA = [
-    'title'           => ['vaha' => 3, 'typ' => 'text'],
+    // Nazov pozicie a nazov firmy sa NEPOROVNAVAJU — od promptu v4 ich
+    // model nevracia. Su to presne retazce zo stranky, ktore vytiahne
+    // scraper z HTML; modely ich komolili ("cacnika" namiesto "casnika").
+    'profession'      => ['vaha' => 3, 'typ' => 'text'],
     'salary_min'      => ['vaha' => 3, 'typ' => 'cislo'],
     'salary_max'      => ['vaha' => 2, 'typ' => 'cislo'],
     'salary_period'   => ['vaha' => 2, 'typ' => 'presne'],
-    'company_name'    => ['vaha' => 2, 'typ' => 'text'],
-    'employment_type' => ['vaha' => 2, 'typ' => 'presne'],
+
+    // Uvazok sa porovnava ako mnozina, nie jedna hodnota: inzerat casto
+    // ponuka viac moznosti naraz ("plny uvazok, na dohodu"). Pri jedinej
+    // hodnote by sa modely nezhodli nikdy — spravna odpoved je "oboje".
+    'employment_types' => ['vaha' => 2, 'typ' => 'mnozina'],
     'is_agency'       => ['vaha' => 2, 'typ' => 'bool'],
     'remote_type'     => ['vaha' => 1, 'typ' => 'presne'],
     'seniority'       => ['vaha' => 1, 'typ' => 'presne'],
