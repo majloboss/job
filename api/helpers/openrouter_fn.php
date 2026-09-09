@@ -229,7 +229,15 @@ function or_call_model(string $prompt, string $model, int $maxTokens = 1200): ar
     $out['usage']   = $ai['usage'] ?? null;
 
     if (($ai['choices'][0]['finish_reason'] ?? null) === 'length') {
-        $out['error']  = 'Odpoveď modelu bola orezaná (max_tokens)';
+        // Reasoning modely ratuju do max_tokens aj vnutorne uvazovanie.
+        // Ked minu cely strop na uvazovanie, obsah pride prazdny — to nie je
+        // "orezana odpoved", ale model, ktory sa k odpovedi vobec nedostal.
+        // Rozlisenie je podstatne: prve sa riesi kratsim vstupom, druhe
+        // vyssim stropom alebo inym modelom.
+        $uvazoval = ($ai['choices'][0]['message']['reasoning'] ?? '') !== '';
+        $out['error']  = ($content === '' && $uvazoval)
+            ? 'Model minul celý limit na uvažovanie a nestihol odpovedať'
+            : 'Odpoveď modelu bola orezaná (max_tokens)';
         $out['status'] = 'truncated';
         return $out;
     }
@@ -254,8 +262,13 @@ function or_call_model(string $prompt, string $model, int $maxTokens = 1200): ar
 function or_evaluate(array $ctx, string $model): array {
     // Pri tazani udajov ('parse') moze byt odpoved dlha — obsahuje aj preklad
     // celeho inzeratu. 1200 tokenov by ju orezalo hned pri prvom dlhsom texte.
+    //
+    // 12000 nie je preklep: REASONING MODELY (nex-n2.5-pro, dots-3-note)
+    // ratuju do max_tokens aj vnutorne uvazovanie. Pri strope 4000 minuli
+    // vsetko na uvazovanie a vratili finish_reason 'length' s prazdnym
+    // obsahom — vyzeralo to ako chyba promptu, pritom siel o limit.
     $ucel = $ctx['ucel'] ?? 'eval';
-    $res = or_call_model($ctx['prompt'], $model, $ucel === 'parse' ? 4000 : 1200);
+    $res = or_call_model($ctx['prompt'], $model, $ucel === 'parse' ? 12000 : 4000);
     $d   = is_array($res['data']) ? $res['data'] : [];
 
     $num = static fn($v) => is_numeric($v) ? (int)$v : null;

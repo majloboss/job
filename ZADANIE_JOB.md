@@ -283,8 +283,17 @@ odhalilo tri veci, ktoré by sa inak prejavili až v produkcii:
    to, čo sa musí odvodiť (mzda, úväzky, kľúčové slová, súhrn, preklad).
    Odstraňuje to celú triedu chyby namiesto jej detekcie.
 
-**Úspešnosť naprieč verziami promptu** (ten istý inzerát, bezplatné modely):
-v1 → 2/6, v2 → 4/8, v3 → 5/8.
+5. **Reasoning modely rátajú do `max_tokens` aj vnútorné uvažovanie.**
+   Pri strope 4000 minuli `nex-n2.5-pro` aj `dots-3-note-preview` celý limit
+   na uvažovanie a vrátili `finish_reason: length` s **prázdnym obsahom** —
+   vyzeralo to ako chyba promptu, hoci šlo o limit. Strop pre `parse` je preto
+   **12000** a chybová hláška rozlišuje „orezaná odpoveď" od „model sa
+   k odpovedi vôbec nedostal": prvé sa rieši kratším vstupom, druhé vyšším
+   stropom alebo iným modelom.
+
+**Poučenie z testov:** keď model zlyhá, treba sa pozrieť na **surovú odpoveď**
+vrátane `finish_reason` a `usage`, nie hádať z toho, že chýba pole. Dve rôzne
+príčiny (zlý prompt, malý strop) vyzerajú v súhrne rovnako.
 
 ### Dva kroky získavania údajov
 

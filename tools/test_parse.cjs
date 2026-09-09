@@ -88,7 +88,10 @@ function htmlNaText(html) {
                     body: JSON.stringify({
                         model: model.model_id,
                         messages: [{ role: 'user', content: prompt }],
-                        temperature: 0, max_tokens: 4000,
+                        // 12000, nie 4000: reasoning modely ratuju do
+                        // max_tokens aj vnutorne uvazovanie a pri nizsom
+                        // strope vratia prazdny obsah (finish_reason 'length').
+                        temperature: 0, max_tokens: 12000,
                     }),
                 });
                 const ms = Date.now() - t0;
@@ -107,7 +110,10 @@ function htmlNaText(html) {
                 // Nazov pozicie model od promptu v4 nevracia (berie ho
                 // scraper z HTML), takze uspech sa meria suhrnom a profesiou.
                 if (!data?.summary_sk || !data?.profession) {
-                    console.log(`neuplne (${(ms/1000).toFixed(1)} s)`);
+                    const dovod = j.choices?.[0]?.finish_reason === 'length'
+                        ? (obsah === '' ? 'minul limit na uvazovanie' : 'orezana odpoved')
+                        : 'neuplne';
+                    console.log(`${dovod} (${(ms/1000).toFixed(1)} s, ${j.usage?.completion_tokens ?? '?'} tok.)`);
                     vysledky.push({ model: model.model_id, ok: false });
                     continue;
                 }
