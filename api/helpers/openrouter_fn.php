@@ -364,15 +364,26 @@ function or_evaluate(array $ctx, string $model): array {
     if ($trvale !== null) ai_vyrad_model($model, $trvale);
 
     // Uspech znamena pri kazdom ucele nieco ine: pri posudzovani vhodnosti
-    // musi prist skore, pri tazani udajov suhrn a profesia. Model, ktory
-    // vrati prazdny JSON, "odpovedal" — pouzitelny vsak nie je.
+    // musi prist skore, pri tazani udajov suhrn. Model, ktory vrati prazdny
+    // JSON, "odpovedal" — pouzitelny vsak nie je.
     //
-    // Nazov pozicie sa uz neposudzuje: od promptu v4 ho model nevracia,
+    // Profesia sa NEVYZADUJE: nie kazdy inzerat ju uvadza jednoznacne
+    // (napr. "Financny poradca / obchodnik / konzultant") a odmietnut kvoli
+    // tomu cely vytazok by zahodilo mzdu, uvazky aj kluc. slova, ktore su
+    // v poriadku.
+    //
+    // Nazov pozicie sa neposudzuje vobec: od promptu v4 ho model nevracia,
     // berie ho scraper priamo z HTML (modely ho komolili).
     $ok = $res['status'] === 'ok'
-        && ($ucel === 'parse'
-            ? (!empty($d['summary_sk']) && !empty($d['profession']))
-            : $score !== null);
+        && ($ucel === 'parse' ? !empty($d['summary_sk']) : $score !== null);
+
+    // Ked odpoved prisla, ale chyba v nej podstatny udaj, musi to byt vidiet
+    // v logu — inak sa vypise len "CHYBA: ok", co nic nehovori.
+    if (!$ok && $res['status'] === 'ok' && $res['error'] === null) {
+        $res['error'] = $ucel === 'parse'
+            ? 'Model nevrátil súhrn (summary_sk)'
+            : 'Model nevrátil skóre';
+    }
 
     return [
         'id'      => (int)$st->fetchColumn(),

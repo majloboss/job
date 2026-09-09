@@ -42,7 +42,6 @@ try {
         $path === 'v1/admin/zber'      => require __DIR__ . '/v1/admin/zber.php',
         // docasna diagnostika: log procesov beziacich na pozadi
         $path === 'v1/admin/diag-log'  => require __DIR__ . '/v1/admin/diag_log.php',
-        $path === 'v1/admin/diag-bool' => require __DIR__ . '/v1/admin/diag_bool.php',
 
         default => json_error('Neznámy endpoint: ' . $path, 404),
     };
