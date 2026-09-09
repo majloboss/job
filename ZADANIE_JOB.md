@@ -407,11 +407,11 @@ od 900 px je to tabuľka s klikateľnými hlavičkami.
 | 1b | Dokumenty (CV) + AI posudzovanie + laboratórium modelov, migrácia 002 | ✅ |
 | 1c | Hosting, databáza, deploy workflow, prvý admin | ✅ |
 | 1d | React kostra: login, layout, dokumenty, preferencie | ✅ |
-| 1e | Číselník modelov s cenami + poradie náhradných modelov, migrácia 004 | 🟠 |
-| 1f | Prompt `offer_parse` + kľúč. slová, technológie, odvetvie, migrácia 005 | 🟠 |
-| 1f2 | Prompt v2–v4 podľa testov, viac úväzkov naraz, migrácie 006–008 | 🟠 |
-| 1g | Laboratórium pre účel `parse` + vyhodnotenie zhody modelov | 🟠 |
-| 1h | Obrazovka ponúk s filtrami a radením (`/v1/offers` + `Ponuky.jsx`) | 🟠 |
+| 1e | Číselník modelov s cenami + poradie náhradných modelov, migrácia 004 | ✅ |
+| 1f | Prompt `offer_parse` + kľúč. slová, technológie, odvetvie, migrácia 005 | ✅ |
+| 1f2 | Prompt v2–v4 podľa testov, viac úväzkov naraz, migrácie 006–008 | ✅ |
+| 1g | Laboratórium pre účel `parse` + vyhodnotenie zhody modelov | ✅ |
+| 1h | Obrazovka ponúk s filtrami a radením (`/v1/offers` + `Ponuky.jsx`) | ✅ |
 | 2 | Naplnenie číselníkov (lokality SK s GPS, profesie, mapovania portálov) | 🔲 |
 | 3 | Python scraper profesia.sk — zoznamy + detaily + HTML do `offer_content` | 🔲 |
 | 4 | Detekcia jazyka + preklad EN→SK do `offer_content` | 🔲 |
