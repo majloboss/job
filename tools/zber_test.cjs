@@ -63,11 +63,18 @@ const LIMIT = Number(process.argv[2] || 5);
 
         let ok = 0, chyb = 0, cenaSpolu = 0, tokSpolu = 0;
 
+        const pauza = ms => new Promise(r => setTimeout(r, ms));
+
         for (const o of oz.rows) {
             process.stdout.write('  ' + o.external_id + ' … ');
             const t0 = Date.now();
             let stav = 'ok', chyba = null, data = null, usage = null;
 
+            // Bezplatne modely maju limit poziadaviek ZA MINUTU. Pri prvom
+            // narazeni sa cakalo len na dalsi inzerat a zlyhala cela davka
+            // (50 z 50). Preto sa volanie opakuje s narastajucou pauzou —
+            // limit sa obnovuje priebezne, staci mu dat cas.
+            for (let pokus = 1; pokus <= 4; pokus++) {
             try {
                 const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                     method: 'POST',
@@ -94,6 +101,17 @@ const LIMIT = Number(process.argv[2] || 5);
                     }
                 }
             } catch (e) { stav = 'failed'; chyba = e.message; }
+
+            // Limit za minutu nie je chyba modelu — pockat a skusit znova.
+            if (chyba && /rate limit|429|per-min/i.test(chyba) && pokus < 4) {
+                const cakat = pokus * 20000;
+                process.stdout.write(`limit, čakám ${cakat / 1000}s… `);
+                await pauza(cakat);
+                stav = 'ok'; chyba = null; data = null; usage = null;
+                continue;
+            }
+            break;
+            }
 
             const ms = Date.now() - t0;
             // Cena podla cennika v case volania — ako ai_cena_volania() v PHP.
@@ -124,6 +142,12 @@ const LIMIT = Number(process.argv[2] || 5);
                 ? v.filter(x => typeof x === 'string' && x.trim()).map(x => x.trim().slice(0, 100))
                 : null;
 
+            // Stlpce maju pevnu dlzku (industry, seniority... VARCHAR(100)
+            // a menej). Model obcas vrati dlhsi text a cely zapis by zlyhal
+            // na "value too long" — hodnota sa preto skrati uz tu.
+            const skrat = (v, n) => (typeof v === 'string' && v.trim())
+                ? v.trim().slice(0, n) : null;
+
             await c.query(
                 `UPDATE job.offers SET
                     profession_raw = COALESCE($1, profession_raw),
@@ -143,13 +167,13 @@ const LIMIT = Number(process.argv[2] || 5);
                     locations_raw = COALESCE($15::TEXT[], locations_raw),
                     updated_at = NOW()
                   WHERE id = $16`,
-                [data.profession ?? null, data.industry ?? null,
-                 String(data.summary_sk).slice(0, 2000), data.orig_lang ?? null,
+                [skrat(data.profession, 200), skrat(data.industry, 100),
+                 String(data.summary_sk).slice(0, 2000), skrat(data.orig_lang, 5),
                  Number.isFinite(+data.salary_min) ? +data.salary_min : null,
                  Number.isFinite(+data.salary_max) ? +data.salary_max : null,
-                 data.salary_period ?? null, data.employment_type ?? null,
-                 pole(data.employment_types), data.remote_type ?? null,
-                 data.seniority ?? null,
+                 skrat(data.salary_period, 10), skrat(data.employment_type, 30),
+                 pole(data.employment_types), skrat(data.remote_type, 20),
+                 skrat(data.seniority, 50),
                  typeof data.is_agency === 'boolean' ? data.is_agency : null,
                  pole(data.keywords), pole(data.technologies), pole(data.locations),
                  o.id]);
@@ -166,6 +190,7 @@ const LIMIT = Number(process.argv[2] || 5);
             }
 
             ok++;
+            await pauza(1500);   // rozostup, aby sa limit za minutu necerpal naraz
             console.log(`OK "${String(data.profession).slice(0, 26)}" `
                       + `${usage?.total_tokens ?? '?'} tok., ${(ms / 1000).toFixed(1)}s, `
                       + `$${cena.toFixed(6)}`);
