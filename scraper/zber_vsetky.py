@@ -97,7 +97,14 @@ def stiahni(session, url, timeout=30):
         "Accept": "text/html,application/xhtml+xml",
     })
     r.raise_for_status()
-    r.encoding = r.apparent_encoding or "utf-8"
+
+    # Kodovanie: requests pri chybajucej hlavicke hada Latin-1 a slovenska
+    # diakritika sa rozpadne ("pozÃ­cie" namiesto "pozície"). Ariva presne
+    # taka je. Preto sa berie deklaracia zo samotneho HTML, az potom odhad.
+    if not re.search(r"charset", r.headers.get("content-type", ""), re.I):
+        m = re.search(rb'charset=[\"]?([\w-]+)', r.content[:2000], re.I)
+        r.encoding = (m.group(1).decode("ascii", "ignore") if m else "utf-8")
+
     return r.text, int((time.time() - t0) * 1000), len(r.content)
 
 
