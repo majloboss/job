@@ -138,6 +138,30 @@ VZORY_MIMO = re.compile(
     r"|\?page|&page|/page/|/strana|/filter|/hladat|/search\?|/rss|\.pdf$|\.jpg$)", re.I)
 
 
+# LinkedIn: karty vracia verejne rozhranie pre neprihlasenych a odkaz vedie
+# na sk.linkedin.com, teda na INU domenu nez base. Bezna kontrola domeny by
+# ho zahodila, preto ma vlastnu vetvu.
+RE_LI_ODKAZ = re.compile(r'href="(https://[a-z]{0,3}\.?linkedin\.com/jobs/view/[^"?]+)')
+RE_LI_TITUL = re.compile(r'base-search-card__title[^>]*>\s*(.*?)\s*<', re.S)
+
+
+def najdi_ponuky_linkedin(html_text):
+    """Karty z verejneho rozhrania LinkedInu. Vracia rovnaky tvar ako najdi_ponuky()."""
+    odkazy = RE_LI_ODKAZ.findall(html_text)
+    tituly = RE_LI_TITUL.findall(html_text)
+    vysledok = []
+    videne = set()
+    for i, u in enumerate(odkazy):
+        u = u.split("?")[0]
+        if u in videne:
+            continue
+        videne.add(u)
+        t = tituly[i] if i < len(tituly) else ""
+        t = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", t))).strip()
+        vysledok.append((u, t[:300]))
+    return vysledok
+
+
 def najdi_ponuky(html_text, base, ponuk_na_stranu=None):
     """
     Vytiahne zo stranky odkazy, ktore vyzeraju ako detail ponuky.
@@ -270,14 +294,36 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov):
         cur.close()
         return 0, 0
 
-    ponuky = najdi_ponuky(h, url, zdroj["ponuk_na_stranu"])
+    jeLinkedIn = kod == "linkedin"
+    ponuky = (najdi_ponuky_linkedin(h) if jeLinkedIn
+              else najdi_ponuky(h, url, zdroj["ponuk_na_stranu"]))
     print("  Na vypise najdenych odkazov na ponuky: %d" % len(ponuky))
 
     # --- strankovanie ---
     # Ked portal uvadza pocet ponuk na stranu a nasli sme ich aspon tolko,
     # su pravdepodobne dalsie stranky. Skusaju sa bezne tvary adries.
+    # LinkedIn strankuje parametrom start po 10 — ma vlastny cyklus, lebo
+    # bezne tvary (page=, strana=) tu nefunguju.
+    if jeLinkedIn and len(ponuky) < limit:
+        videne = {u for u, _ in ponuky}
+        for start in range(10, 400, 10):
+            if len(ponuky) >= limit:
+                break
+            try:
+                time.sleep(pauza)
+                spojka = "&" if "?" in url else "?"
+                h2, _, _ = stiahni(session, url + spojka + "start=%d" % start)
+                nove = [p for p in najdi_ponuky_linkedin(h2) if p[0] not in videne]
+                if not nove:
+                    break
+                videne.update(u for u, _ in nove)
+                ponuky.extend(nove)
+            except Exception:
+                break
+        print("    po strankovani: %d ponuk" % len(ponuky))
+
     na_stranu = zdroj["ponuk_na_stranu"]
-    if na_stranu and len(ponuky) >= na_stranu and len(ponuky) < limit:
+    if not jeLinkedIn and na_stranu and len(ponuky) >= na_stranu and len(ponuky) < limit:
         for strana in range(2, 8):
             if len(ponuky) >= limit:
                 break
