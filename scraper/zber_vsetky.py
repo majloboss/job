@@ -126,9 +126,15 @@ def jazyk_stranky(h):
 RE_ODKAZ = re.compile(r'<a\b[^>]*\bhref="([^"#]+)"[^>]*>(.*?)</a>', re.S | re.I)
 
 # Cesty, ktore na slovenskych portaloch vedu na DETAIL ponuky.
+#
+# Dva tvary, lebo portaly ich pisu opacne:
+#   /praca/nieco, /jobs/uuid       — kluc. slovo na ZACIATKU cesty
+#   /projektovy-manazer-praca      — kluc. slovo na KONCI (titans.eu)
+KLUCE = r"praca|ponuk[ay]?|pozici[ae]|job|jobs|kariera|vacancy|offer|inzerat"
 VZORY_DETAIL = re.compile(
-    r"/(praca|ponuk[ay]?|pozici[ae]|job|jobs|kariera|vacancy|offer|inzerat)"
-    r"[/-][\w%\-]{3,}", re.I)
+    r"(/(%s)[/-][\w%%\-]{3,}"          # kluc na zaciatku
+    r"|/[\w%%\-]{3,}-(%s)/?$)"         # kluc na konci
+    % (KLUCE, KLUCE), re.I)
 
 # Stranky, ktore vyzeraju ako ponuka, ale su to vypisy, filtre alebo
 # navigacia. Bez toho by sa stahovali desiatky stran s nicim.
