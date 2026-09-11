@@ -301,7 +301,11 @@ function test_zapis(PDO $pdo, int $behId, int $cislo, string $uloha,
         $skore, $txt($d['zaradenie'] ?? null, 20), $txt($d['hodnotenie'] ?? null, 4000),
         $riadky($d['pre'] ?? null), $riadky($d['proti'] ?? null),
 
-        $v['ok'] ? 'ok' : $v['status'], $v['chyba'], $v['surova'],
+        // Ked odpoved prisla, ale chyba v nej podstatny udaj, status NESMIE
+        // zostat 'ok' — taky riadok by v tabulke vyzeral ako uspesny, hoci
+        // model nevratil to hlavne, na co sa testuje.
+        $v['ok'] ? 'ok' : ($v['status'] === 'ok' ? 'neuplne' : $v['status']),
+        $v['chyba'], $v['surova'],
         $v['prompt_tokens'], $v['completion_tokens'], $v['tokenov'],
         $v['cena'], $v['ms'],
     ]);

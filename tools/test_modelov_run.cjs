@@ -180,8 +180,11 @@ async function zavolaj(beh, cislo, uloha, model, prompt) {
         chyba = uloha === 'parse' ? 'Model nevrátil názov alebo súhrn' : 'Model nevrátil skóre';
     }
 
+    // Ked odpoved prisla, ale chyba v nej podstatny udaj, status NESMIE
+    // zostat 'ok' — v tabulke by taky riadok vyzeral ako uspesny, hoci
+    // model nevratil to hlavne, na co sa testuje.
     return {
-        ok, data: d, status: ok ? 'ok' : stav, chyba,
+        ok, data: d, status: ok ? 'ok' : (stav === 'ok' ? 'neuplne' : stav), chyba,
         surova: ok ? null : obsah.slice(0, 2000),
         tokenov: usage?.total_tokens || 0,
         prompt_tokens: usage?.prompt_tokens ?? null,
