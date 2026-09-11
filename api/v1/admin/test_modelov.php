@@ -68,12 +68,13 @@ if ($method === 'GET') {
     foreach ($vysledky as &$v) {
         $v['je_free'] = ai_je_true($v['je_free']);
         $v['uvazky']  = test_pg_pole($v['uvazky']);
-        // HTML inzeratu moze mat desiatky kB. Do zoznamu ide len priznak,
-        // ze existuje; cele sa dotahuje az pri rozkliknuti riadka.
         $v['ma_html'] = ($v['html_sk'] ?? '') !== '' || ($v['html_original'] ?? '') !== '';
-        if (($_GET['html'] ?? '') !== '1') {
-            unset($v['html_original'], $v['html_sk'], $v['surova_odpoved']);
-        }
+
+        // HTML od modelu ide priamo do stranky, takze sa musi ocistit —
+        // model moze vratit <script> alebo onclick, at uz omylom alebo
+        // preto, ze to bolo v povodnom inzerate.
+        $v['html_original'] = test_ocisti_html($v['html_original'] ?? null);
+        $v['html_sk']       = test_ocisti_html($v['html_sk'] ?? null);
     }
     unset($v);
 
@@ -199,6 +200,35 @@ json_ok([
     'sprava'    => 'Test spustený — výsledky pribúdajú priebežne',
 ]);
 
+
+// ------------------------------------------------------------
+// Ocisti HTML od modelu pred zobrazenim.
+//
+// Vystup modelu sa vklada do stranky, takze sa s nim musi zaobchadzat ako
+// s cudzim vstupom: model moze vratit <script>, <iframe> alebo onclick —
+// bud omylom, alebo preto, ze to bolo v povodnom inzerate.
+//
+// Povoluju sa len znacky, ktore prompt ziada: nadpisy, odseky, zoznamy
+// a zakladne zvyraznenie.
+// ------------------------------------------------------------
+function test_ocisti_html(?string $html): ?string {
+    if ($html === null || trim($html) === '') return null;
+
+    // Nebezpecne prvky aj s obsahom.
+    $html = preg_replace('#<(script|style|iframe|object|embed|form)[^>]*>.*?</>#is',
+                         '', $html);
+    $html = preg_replace('#<(script|style|iframe|object|embed|form|input)[^>]*/?>#i',
+                         '', $html);
+
+    $html = strip_tags($html, '<h1><h2><h3><h4><p><br><ul><ol><li><strong><b><em><i><ins><table><tr><td><th><thead><tbody>');
+
+    // Atributy on* (onclick, onerror) a javascript: v href.
+    $html = preg_replace('#\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)#i', '', $html);
+    $html = preg_replace('#\s+(href|src)\s*=\s*("|')?\s*javascript:[^"'>]*("|')?#i',
+                         '', $html);
+
+    return mb_substr(trim($html), 0, 60000);
+}
 
 // PostgreSQL vracia TEXT[] ako '{a,b}'. Bez rozbalenia by frontend dostal
 // nepouzitelny retazec namiesto pola.

@@ -236,3 +236,103 @@
   .tm-zadanie > label { max-width: 720px; }
   .tm-parametre label { flex: 0 1 150px; }
 }
+
+/* ============================================================
+   LIŠTA NAD TABUĽKOU — rozbalenie a prepínač jazyka
+   ============================================================ */
+.tm-lista {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.tm-lista .tm-popis-ulohy { margin: 0; flex: 1 1 auto; }
+
+.tm-zavri-vsetky {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tm-jazyk button { min-height: 34px; font-size: 13px; }
+
+/* ============================================================
+   DETAIL — celý vyťažený inzerát
+   Viac riadkov môže byť otvorených naraz, preto má detail výrazný
+   ľavý pruh: inak by sa v dlhej tabuľke stratilo, kde ktorý začína.
+   ============================================================ */
+.tm-detail-riadok > td {
+  border-left: 3px solid var(--accent);
+}
+
+.tm-detail-hlava {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.tm-detail-hlava code {
+  font-size: 13px;
+  font-weight: 600;
+}
+.tm-detail-meta { color: var(--muted); font-size: 12px; margin-left: auto; }
+
+/* Vyťažené údaje v dvoch stĺpcoch — mená polí vľavo, hodnoty vpravo. */
+.tm-udaje {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 14px;
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+.tm-udaje dt { color: var(--muted); white-space: nowrap; }
+.tm-udaje dd { margin: 0; }
+
+.tm-sumar {
+  padding: 10px 12px;
+  background: var(--bg);
+  border-left: 3px solid var(--line);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* Inzerát prepísaný modelom. Vlastné pozadie a rám, aby bolo jasné,
+   kde končí naša obrazovka a začína obsah od modelu. */
+.tm-html {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  max-height: 520px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.tm-html h1, .tm-html h2, .tm-html h3, .tm-html h4 {
+  font-size: 15px;
+  margin: 14px 0 6px;
+}
+.tm-html h1:first-child, .tm-html h2:first-child { margin-top: 0; }
+.tm-html p  { margin: 0 0 8px; }
+.tm-html ul, .tm-html ol { margin: 0 0 8px; padding-left: 22px; }
+.tm-html li { margin-bottom: 3px; }
+.tm-html table { border-collapse: collapse; margin: 8px 0; }
+.tm-html td, .tm-html th {
+  border: 1px solid var(--line);
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.tm-skore-velke { font-size: 15px; margin: 0 0 10px; }
+.tm-skore-velke .tm-skore { font-size: 18px; padding: 3px 12px; }

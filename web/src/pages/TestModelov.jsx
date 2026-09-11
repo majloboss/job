@@ -35,7 +35,10 @@ export default function TestModelov() {
 
   const [ulohaTab, setUlohaTab] = useState('parse');
   const [inzeratTab, setInzeratTab] = useState(1);
-  const [otvoreny, setOtvoreny] = useState(null);    // rozkliknutý riadok
+  // Otvorených riadkov môže byť VIAC naraz — o to ide: porovnať, čo
+  // rôzne modely vytiahli z toho istého inzerátu, bez zatvárania predošlého.
+  const [otvorene, setOtvorene] = useState(() => new Set());
+  const [jazyk, setJazyk] = useState('sk');   // ktorú verziu HTML ukázať
 
   const casovacRef = useRef(null);
 
@@ -267,7 +270,30 @@ export default function TestModelov() {
             </div>
           </div>
 
-          <p className="tm-popis-ulohy">{ULOHY[ulohaTab].popis}</p>
+          <div className="tm-lista">
+            <p className="tm-popis-ulohy">{ULOHY[ulohaTab].popis}</p>
+
+            {otvorene.size > 0 && (
+              <button className="tm-zavri-vsetky" onClick={() => setOtvorene(new Set())}>
+                Zavrieť všetky ({otvorene.size})
+              </button>
+            )}
+            <button className="tm-zavri-vsetky"
+                    onClick={() => setOtvorene(new Set(vysledky.map(v => v.id)))}>
+              Rozbaliť všetky
+            </button>
+
+            {/* Pri slovenskom inzeráte sú obe verzie rovnaké — prepínač
+                má zmysel až pri cudzojazyčnom. */}
+            {ulohaTab === 'parse' && (
+              <span className="tm-skupina tm-jazyk">
+                <button className={jazyk === 'sk' ? 'aktivny' : ''}
+                        onClick={() => setJazyk('sk')}>Slovensky</button>
+                <button className={jazyk === 'orig' ? 'aktivny' : ''}
+                        onClick={() => setJazyk('orig')}>Originál</button>
+              </span>
+            )}
+          </div>
 
           {vysledky.length === 0 ? (
             <p className="tm-prazdne">
@@ -297,9 +323,13 @@ export default function TestModelov() {
                 </thead>
                 <tbody>
                   {vysledky.map(v => (
-                    <Riadok key={v.id} v={v} uloha={ulohaTab}
-                            otvoreny={otvoreny === v.id}
-                            prepni={() => setOtvoreny(otvoreny === v.id ? null : v.id)} />
+                    <Riadok key={v.id} v={v} uloha={ulohaTab} jazyk={jazyk}
+                            otvoreny={otvorene.has(v.id)}
+                            prepni={() => setOtvorene(p => {
+                              const n = new Set(p);
+                              n.has(v.id) ? n.delete(v.id) : n.add(v.id);
+                              return n;
+                            })} />
                   ))}
                 </tbody>
               </table>
@@ -314,7 +344,7 @@ export default function TestModelov() {
 // ------------------------------------------------------------
 // Jeden riadok výsledku + rozkliknutý detail
 // ------------------------------------------------------------
-function Riadok({ v, uloha, otvoreny, prepni }) {
+function Riadok({ v, uloha, jazyk, otvoreny, prepni }) {
   const zlyhal = v.status !== 'ok';
   const stlpcov = uloha === 'parse' ? 11 : 8;
 
@@ -364,24 +394,67 @@ function Riadok({ v, uloha, otvoreny, prepni }) {
       {otvoreny && (
         <tr className="tm-detail-riadok">
           <td colSpan={stlpcov}>
+            <div className="tm-detail-hlava">
+              <code>{v.model_id}</code>
+              {v.je_free && <span className="tm-free">zadarmo</span>}
+              <span className="tm-detail-meta">
+                {v.total_tokens} tok. · {(v.trvanie_ms / 1000).toFixed(1)} s
+                {Number(v.cena_usd) > 0 && ' · $' + Number(v.cena_usd).toFixed(6)}
+              </span>
+            </div>
+
             {zlyhal && <p className="tm-chyba-text">{v.chyba}</p>}
 
             {uloha === 'parse' ? (
               <div className="tm-detail">
-                {v.sumar && <><h4>Súhrn</h4><p>{v.sumar}</p></>}
-                <dl>
-                  {v.datum_zverejnenia && <><dt>Zverejnené</dt><dd>{v.datum_zverejnenia}</dd></>}
-                  {v.datum_zverejnenia_text && (
-                    <><dt>Zverejnené (text)</dt><dd>{v.datum_zverejnenia_text}</dd></>
-                  )}
-                  {v.mzda_text && <><dt>Mzda (text)</dt><dd>{v.mzda_text}</dd></>}
-                  {v.lokalita_zvysok && <><dt>Lokalita</dt><dd>{v.lokalita_zvysok}</dd></>}
-                  {v.orig_lang && <><dt>Jazyk</dt><dd>{v.orig_lang}</dd></>}
+                {/* Vyťažené údaje pokope — aby sa dali porovnať medzi modelmi
+                    bez preskakovania po stĺpcoch tabuľky. */}
+                <dl className="tm-udaje">
+                  <dt>Názov</dt><dd>{v.nazov || '—'}</dd>
+                  <dt>Firma</dt><dd>{v.firma || '—'}</dd>
+                  <dt>Zverejnené</dt>
+                  <dd>{v.datum_zverejnenia || v.datum_zverejnenia_text || '—'}</dd>
+                  <dt>Mzda</dt>
+                  <dd>{mzda(v)}{v.mzda_text && v.mzda_text !== mzda(v)
+                        ? ` (${v.mzda_text})` : ''}</dd>
+                  <dt>Nástup</dt><dd>{v.nastup || '—'}</dd>
+                  <dt>Úväzok</dt>
+                  <dd>{v.uvazky?.length ? v.uvazky.join(', ') : (v.uvazok || '—')}</dd>
+                  <dt>Mesto</dt><dd>{v.mesto || '—'}</dd>
+                  <dt>Lokalita</dt><dd>{v.lokalita_zvysok || '—'}</dd>
+                  <dt>Jazyk</dt><dd>{v.orig_lang || '—'}</dd>
                 </dl>
-                {v.ma_html && <p className="tm-nic">HTML inzerátu je uložené v databáze.</p>}
+
+                {v.sumar && (
+                  <>
+                    <h4>Súhrn</h4>
+                    <p className="tm-sumar">{v.sumar}</p>
+                  </>
+                )}
+
+                {/* Celý inzerát tak, ako ho model prepísal. HTML je na
+                    serveri očistené — povolené sú len nadpisy, odseky
+                    a zoznamy, ktoré prompt žiada. */}
+                {(v.html_sk || v.html_original) && (
+                  <>
+                    <h4>
+                      Inzerát {jazyk === 'sk' ? '(slovensky)' : '(originál)'}
+                    </h4>
+                    <div className="tm-html"
+                         dangerouslySetInnerHTML={{
+                           __html: (jazyk === 'sk' ? v.html_sk : v.html_original)
+                                   || v.html_sk || v.html_original }} />
+                  </>
+                )}
               </div>
             ) : (
               <div className="tm-detail">
+                {v.skore !== null && (
+                  <p className="tm-skore-velke">
+                    <span className={'tm-skore ' + (v.zaradenie || '')}>{v.skore}</span>
+                    {' '}{v.zaradenie}
+                  </p>
+                )}
                 {v.hodnotenie && <><h4>Hodnotenie</h4><p>{v.hodnotenie}</p></>}
                 {v.pre_argumenty && (
                   <><h4>Hovorí pre</h4>
