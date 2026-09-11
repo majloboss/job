@@ -8,6 +8,7 @@ import AiLab from './pages/AiLab';
 import Modely from './pages/Modely';
 import Naklady from './pages/Naklady';
 import Zber from './pages/Zber';
+import TestModelov from './pages/TestModelov';
 import Ponuky from './pages/Ponuky';
 import Documents from './pages/Documents';
 import Preferences from './pages/Preferences';
@@ -41,6 +42,7 @@ createRoot(document.getElementById('root')).render(
           <Route path="modely"      element={<LenAdmin><Modely /></LenAdmin>} />
           <Route path="naklady"     element={<LenAdmin><Naklady /></LenAdmin>} />
           <Route path="zber"        element={<LenAdmin><Zber /></LenAdmin>} />
+          <Route path="test-modelov" element={<LenAdmin><TestModelov /></LenAdmin>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

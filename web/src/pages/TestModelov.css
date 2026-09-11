@@ -1,0 +1,238 @@
+/* ============================================================
+   Test modelov — porovnanie modelov na dvoch úlohách.
+   Tabuľky sú široké (11 stĺpcov), preto sa posúvajú vo vlastnom obale.
+   ============================================================ */
+
+.tmod { padding: 16px; max-width: 1400px; margin: 0 auto; }
+.tmod h1 { margin: 0 0 8px; font-size: 22px; }
+.tmod h2 {
+  margin: 24px 0 10px;
+  font-size: 17px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.tmod h4 { margin: 12px 0 4px; font-size: 14px; }
+
+.tm-popis { color: var(--muted); font-size: 14px; margin: 0 0 16px; max-width: 760px; }
+.tm-popis-ulohy { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+.tm-prazdne { color: var(--muted); padding: 16px 0; }
+.tm-nic { color: var(--muted); }
+
+.tm-chyba, .tm-sprava, .tm-upozornenie, .tm-zastavene {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  margin: 0 0 14px;
+  font-size: 14px;
+}
+.tm-chyba  { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); }
+.tm-sprava { background: color-mix(in srgb, var(--ok) 12%, transparent);  color: var(--ok); }
+.tm-upozornenie, .tm-zastavene {
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn);
+}
+
+/* --- zadanie --- */
+.tm-zadanie {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+.tm-zadanie h2 { margin-top: 0; }
+
+.tm-zadanie > label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.tm-zadanie input {
+  min-height: var(--dotyk);
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+.tm-parametre {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin-top: 12px;
+}
+.tm-parametre label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 120px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.tm-parametre input { width: 100%; }
+
+.tm-spustit {
+  min-height: var(--dotyk);
+  padding: 0 22px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tm-spustit:disabled { opacity: .45; cursor: default; }
+
+.tm-info { margin: 12px 0 0; font-size: 13px; color: var(--muted); }
+
+/* --- tabuľky --- */
+.tm-obal { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.tm-tabulka {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  min-width: 800px;
+}
+.tm-tabulka.tm-siroka { min-width: 1100px; }
+
+.tm-tabulka th, .tm-tabulka td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+.tm-tabulka th {
+  background: var(--panel);
+  font-size: 13px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.tm-tabulka td.cislo, .tm-tabulka th.cislo { text-align: right; }
+.tm-tabulka tbody tr { cursor: pointer; }
+.tm-tabulka tbody tr:hover { background: var(--panel); }
+.tm-tabulka tr.zle { background: color-mix(in srgb, var(--bad) 6%, transparent); }
+.tm-tabulka tr.vybrany { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+
+.tm-model {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.tm-nazov, .tm-text { white-space: normal; max-width: 220px; }
+.tm-hodnotenie { white-space: normal; max-width: 380px; font-size: 13px; }
+.tm-druhy { color: var(--muted); }
+.tm-zo { color: var(--muted); font-size: 12px; }
+
+.tm-free, .tm-zadarmo { color: var(--ok); font-size: 11px; margin-left: 5px; }
+
+.tm-stav {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  background: var(--panel);
+  color: var(--muted);
+}
+.tm-stav.running { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+.tm-stav.done    { background: color-mix(in srgb, var(--ok) 15%, transparent);     color: var(--ok); }
+.tm-stav.failed, .tm-stav.cancelled { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+.tm-stav.stopped_budget { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+
+.tm-dovod { margin-left: 6px; color: var(--warn); font-weight: 700; cursor: help; }
+
+.tm-skore {
+  display: inline-block;
+  min-width: 32px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  text-align: center;
+  font-weight: 600;
+  background: var(--panel);
+}
+.tm-skore.vhodne       { background: color-mix(in srgb, var(--ok) 18%, transparent);   color: var(--ok); }
+.tm-skore.menej_vhodne { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.tm-skore.nevhodne     { background: color-mix(in srgb, var(--bad) 14%, transparent);  color: var(--bad); }
+
+.tm-chyba-text { color: var(--bad); font-size: 13px; }
+
+.tm-zrusit {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--bad);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* --- prepínače inzerát / úloha --- */
+.tm-prepinace { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 10px; }
+.tm-skupina { display: flex; gap: 6px; }
+.tm-skupina button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.tm-skupina button.aktivny {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.tm-suhrn { font-size: 13px; font-weight: 400; color: var(--muted); }
+
+/* Pulzovanie: test beží hodiny a treba vidieť, že sa niečo deje. */
+.tm-bezi { font-size: 13px; font-weight: 400; color: var(--accent); }
+.tm-bezi::before {
+  content: '';
+  display: inline-block;
+  width: 8px; height: 8px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: tm-puls 1.4s ease-in-out infinite;
+}
+@keyframes tm-puls { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* --- rozkliknutý detail --- */
+.tm-detail-riadok > td {
+  white-space: normal;
+  background: var(--panel);
+  padding: 12px 16px;
+}
+.tm-detail { max-width: 900px; font-size: 14px; }
+.tm-detail p  { margin: 0 0 8px; }
+.tm-detail ul { margin: 0 0 8px; padding-left: 20px; }
+.tm-detail dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 14px;
+  margin: 8px 0 0;
+}
+.tm-detail dt { color: var(--muted); }
+.tm-detail dd { margin: 0; }
+
+/* ============================================================
+   ŠIROKÉ DISPLEJE
+   ============================================================ */
+@media (min-width: 760px) {
+  .tmod { padding: 24px; }
+  .tm-zadanie > label { max-width: 720px; }
+  .tm-parametre label { flex: 0 1 150px; }
+}

@@ -40,6 +40,8 @@ try {
 
         // rucne spustenie zberu
         $path === 'v1/admin/zber'      => require __DIR__ . '/v1/admin/zber.php',
+        // test modelov: tazenie udajov + vhodnost
+        $path === 'v1/admin/test-modelov' => require __DIR__ . '/v1/admin/test_modelov.php',
         // docasna diagnostika: log procesov beziacich na pozadi
         $path === 'v1/admin/diag-log'  => require __DIR__ . '/v1/admin/diag_log.php',
 

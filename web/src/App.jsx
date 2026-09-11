@@ -11,6 +11,7 @@ const ODKAZY = [
   { to: '/zber',        text: 'Zber',         admin: true },
   { to: '/modely',      text: 'Modely',       admin: true },
   { to: '/naklady',     text: 'Náklady',      admin: true },
+  { to: '/test-modelov',text: 'Test modelov', admin: true },
   { to: '/lab',         text: 'Laboratórium', admin: true },
 ];
 
