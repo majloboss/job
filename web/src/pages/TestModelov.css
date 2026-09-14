@@ -3,7 +3,9 @@
    Tabuľky sú široké (11 stĺpcov), preto sa posúvajú vo vlastnom obale.
    ============================================================ */
 
-.tmod { padding: 16px; max-width: 1400px; margin: 0 auto; }
+/* Bez pevneho max-width: na sirokom monitore sa ma vyuzit cely priestor,
+   aby boli vidiet vsetky stlpce naraz bez vodorovneho posuvania. */
+.tmod { padding: 16px; }
 .tmod h1 { margin: 0 0 8px; font-size: 22px; }
 .tmod h2 {
   margin: 24px 0 10px;
@@ -221,7 +223,7 @@
   background: var(--panel);
   padding: 12px 16px;
 }
-.tm-detail { max-width: 900px; font-size: 14px; }
+.tm-detail { font-size: 14px; }
 .tm-detail p  { margin: 0 0 8px; }
 .tm-detail ul { margin: 0 0 8px; padding-left: 20px; }
 .tm-detail dl {
@@ -241,6 +243,59 @@
   .tm-zadanie > label { max-width: 720px; }
   .tm-parametre label { flex: 0 1 150px; }
 }
+
+/* ============================================================
+   ODKAZY NA TESTOVANE INZERATY
+   ============================================================ */
+.tm-odkazy { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; }
+
+.tm-odkaz {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 560px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 13px;
+}
+.tm-odkaz:hover { border-color: var(--accent); }
+
+.tm-odkaz-cislo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  flex: none;
+}
+/* Nazov inzeratu byva dlhy — oreze sa, cela adresa je v title. */
+.tm-odkaz-nazov {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tm-odkaz-sipka { color: var(--muted); flex: none; }
+
+.tm-beh-detail > td {
+  background: var(--panel);
+  padding: 10px 14px;
+  white-space: normal;
+  border-left: 3px solid var(--accent);
+}
+
+/* Klikatelna hlavicka tabulky */
+.tm-tabulka th { cursor: pointer; user-select: none; }
+.tm-tabulka th:hover  { color: var(--accent); }
+.tm-tabulka th.radene { color: var(--accent); }
+.tm-sipka { margin-left: 4px; font-size: 10px; }
 
 /* ============================================================
    LIŠTA NAD TABUĽKOU — rozbalenie a prepínač jazyka

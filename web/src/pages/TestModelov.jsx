@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, Fragment } from 'react';
 import { api } from '../api';
 import './TestModelov.css';
 
@@ -38,6 +38,10 @@ export default function TestModelov() {
   // Otvorených riadkov môže byť VIAC naraz — o to ide: porovnať, čo
   // rôzne modely vytiahli z toho istého inzerátu, bez zatvárania predošlého.
   const [otvorene, setOtvorene] = useState(() => new Set());
+
+  // Radenie klikom na hlavičku. Predvolene podľa ceny — modely idú v teste
+  // od najlacnejších a v tom poradí sa aj porovnávajú.
+  const [radenie, setRadenie] = useState({ stlpec: 'cena_1m', smer: 'asc' });
 
   const casovacRef = useRef(null);
 
@@ -106,8 +110,42 @@ export default function TestModelov() {
   }
 
   const beh = detail?.beh;
-  const vysledky = (detail?.vysledky ?? [])
+  let vysledky = (detail?.vysledky ?? [])
     .filter(v => v.uloha === ulohaTab && Number(v.inzerat) === inzeratTab);
+
+  if (radenie.stlpec) {
+    const zn = radenie.smer === 'asc' ? 1 : -1;
+    vysledky = [...vysledky].sort((a, b) => {
+      const x = a[radenie.stlpec], y = b[radenie.stlpec];
+      // Prázdne hodnoty vždy dole — model, ktorý údaj nevrátil, nemá byť
+      // hore len preto, že sa radí vzostupne.
+      const xp = x === null || x === undefined || x === '';
+      const yp = y === null || y === undefined || y === '';
+      if (xp && yp) return 0;
+      if (xp) return 1;
+      if (yp) return -1;
+      const cislo = !isNaN(Number(x)) && !isNaN(Number(y));
+      return zn * (cislo ? Number(x) - Number(y)
+                         : String(x).localeCompare(String(y), 'sk'));
+    });
+  }
+
+  function klikStlpec(kod) {
+    setRadenie(r => r.stlpec === kod
+      ? { stlpec: kod, smer: r.smer === 'asc' ? 'desc' : 'asc' }
+      : { stlpec: kod, smer: 'asc' });
+  }
+
+  // Hlavička, na ktorú sa dá kliknúť. Šípka ukazuje aktívny stĺpec aj smer.
+  const Hl = ({ kod, text, cislo }) => (
+    <th className={(cislo ? 'cislo' : '') + (radenie.stlpec === kod ? ' radene' : '')}
+        onClick={() => klikStlpec(kod)} title={'Zoradiť podľa: ' + text}>
+      {text}
+      {radenie.stlpec === kod && (
+        <span className="tm-sipka">{radenie.smer === 'asc' ? '▲' : '▼'}</span>
+      )}
+    </th>
+  );
 
   return (
     <div className="tmod">
@@ -186,8 +224,9 @@ export default function TestModelov() {
               </thead>
               <tbody>
                 {dta.behy.map(b => (
-                  <tr key={b.id} className={(behId === b.id ? 'vybrany ' : '') + b.status}
-                      onClick={() => setBehId(b.id)}>
+                  <Fragment key={b.id}>
+                  <tr className={(behId === b.id ? 'vybrany ' : '') + b.status}
+                      onClick={() => setBehId(behId === b.id ? null : b.id)}>
                     <td>{b.id}</td>
                     <td className="tm-nazov" title={(b.nazov1 || b.url1)
                         + (b.nazov2 ? ' + ' + b.nazov2 : '')}>
@@ -219,6 +258,20 @@ export default function TestModelov() {
                       )}
                     </td>
                   </tr>
+
+                  {/* Po rozkliknutí behu sa ukážu testované inzeráty
+                      s klikateľnými odkazmi na originál. */}
+                  {behId === b.id && (
+                    <tr className="tm-beh-detail">
+                      <td colSpan={8}>
+                        <div className="tm-odkazy">
+                          <Odkaz cislo={1} nazov={b.nazov1} url={b.url1} />
+                          {b.url2 && <Odkaz cislo={2} nazov={b.nazov2} url={b.url2} />}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -241,6 +294,14 @@ export default function TestModelov() {
           {beh.zastavene_dovod && (
             <p className="tm-zastavene">{beh.zastavene_dovod}</p>
           )}
+
+          {/* Odkaz na inzerát, ktorý sa práve prezerá — pri porovnávaní
+              výťažkov treba vedieť skočiť na originál. */}
+          <div className="tm-odkazy">
+            <Odkaz cislo={inzeratTab}
+                   nazov={inzeratTab === 1 ? beh.nazov1 : beh.nazov2}
+                   url={inzeratTab === 1 ? beh.url1 : beh.url2} />
+          </div>
 
           {/* Bez CV a preferencií nemá úloha vhodnosti z čoho hodnotiť. */}
           {(!beh.cv_text || !beh.prefs_text) && (
@@ -297,19 +358,28 @@ export default function TestModelov() {
                 <thead>
                   {ulohaTab === 'parse' ? (
                     <tr>
-                      <th>Model</th><th className="cislo">$/1M</th>
-                      <th>Názov</th><th>Firma</th><th className="cislo">Mzda</th>
-                      <th>Mesto</th><th>Úväzok</th><th>Nástup</th>
-                      <th className="cislo">Tok.</th><th className="cislo">Čas</th>
-                      <th className="cislo">Cena</th>
+                      <Hl kod="model_id" text="Model" />
+                      <Hl kod="cena_1m" text="$/1M" cislo />
+                      <Hl kod="nazov" text="Názov" />
+                      <Hl kod="firma" text="Firma" />
+                      <Hl kod="mzda_min" text="Mzda" cislo />
+                      <Hl kod="mesto" text="Mesto" />
+                      <Hl kod="uvazok" text="Úväzok" />
+                      <Hl kod="nastup" text="Nástup" />
+                      <Hl kod="total_tokens" text="Tok." cislo />
+                      <Hl kod="trvanie_ms" text="Čas" cislo />
+                      <Hl kod="cena_usd" text="Cena" cislo />
                     </tr>
                   ) : (
                     <tr>
-                      <th>Model</th><th className="cislo">$/1M</th>
-                      <th className="cislo">Skóre</th><th>Zaradenie</th>
-                      <th>Hodnotenie</th>
-                      <th className="cislo">Tok.</th><th className="cislo">Čas</th>
-                      <th className="cislo">Cena</th>
+                      <Hl kod="model_id" text="Model" />
+                      <Hl kod="cena_1m" text="$/1M" cislo />
+                      <Hl kod="skore" text="Skóre" cislo />
+                      <Hl kod="zaradenie" text="Zaradenie" />
+                      <Hl kod="hodnotenie" text="Hodnotenie" />
+                      <Hl kod="total_tokens" text="Tok." cislo />
+                      <Hl kod="trvanie_ms" text="Čas" cislo />
+                      <Hl kod="cena_usd" text="Cena" cislo />
                     </tr>
                   )}
                 </thead>
@@ -330,6 +400,22 @@ export default function TestModelov() {
         </section>
       )}
     </div>
+  );
+}
+
+// ------------------------------------------------------------
+// Odkaz na testovaný inzerát. Otvára sa v novom okne — test môže bežať
+// a odchod zo stránky by prerušil sledovanie priebehu.
+// ------------------------------------------------------------
+function Odkaz({ cislo, nazov, url }) {
+  if (!url) return null;
+  return (
+    <a className="tm-odkaz" href={url} target="_blank" rel="noreferrer noopener"
+       onClick={e => e.stopPropagation()} title={url}>
+      <span className="tm-odkaz-cislo">{cislo}</span>
+      <span className="tm-odkaz-nazov">{nazov || url}</span>
+      <span className="tm-odkaz-sipka">↗</span>
+    </a>
   );
 }
 
