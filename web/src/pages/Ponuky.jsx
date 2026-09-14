@@ -50,12 +50,13 @@ const PRAZDNY = {
   stav: 'otvorene',
 };
 
-// Pomenovanie sa drzi toho, co je na zdroji: ariva.sk pise pri inzerate
-// OBSADENE, takze aj filter hovori "obsadené". "Uzavreté" bol nas vlastny
-// pojem, ktory sa nikde na portali nevyskytuje.
+// Filter plati pre VSETKY portaly naraz, takze pomenovanie musi sediet na
+// kazdy dovod: ariva.sk pise OBSADENE, titans.eu NEPRIJIMAME ZAUJEMCOV,
+// inde inzerat len zmizne alebo expiruje. Konkretny dovod ukazuje znacka
+// v riadku inzeratu (ZATVORENE), tu staci delenie na platne a neplatne.
 const STAVY = [
-  ['otvorene', 'Voľné'],
-  ['uzavrete', 'Obsadené'],
+  ['otvorene', 'Platné'],
+  ['uzavrete', 'Neplatné'],
   ['vsetky',   'Všetky'],
 ];
 
