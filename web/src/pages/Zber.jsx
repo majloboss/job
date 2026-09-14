@@ -28,6 +28,8 @@ export default function Zber() {
   const [chyba, setChyba]     = useState(null);
   const [sprava, setSprava]   = useState(null);
   const [pracuje, setPracuje] = useState(false);
+  // Čistenie sa potvrdzuje druhým klikom — zmazanie sa nedá vrátiť.
+  const [cistitPotvrd, setCistitPotvrd] = useState(false);
 
   const [sourceId, setSourceId] = useState('');
   const [dni, setDni]           = useState(1);
@@ -202,6 +204,45 @@ export default function Zber() {
                     title="Model odpovedal, ale údaje sa do inzerátu nezapísali">
               Doplniť neúplné ({neuplnych})
             </button>
+          )}
+        </div>
+      </section>
+
+      {/* --- vyčistenie databázy ---
+          Pri ladení scrapera sa DB čistí často. Potvrdzuje sa v dvoch
+          krokoch: operácia nemá undo a stĺpec tlačidiel je hneď vedľa
+          bežných akcií. */}
+      <section className="zb-nebezpecne">
+        <h2>Vyčistiť databázu</h2>
+        <p className="zb-popis">
+          Zmaže všetky inzeráty, uložené HTML, výsledky ťaženia a históriu
+          behov. Výsledky testu modelov zostanú.
+        </p>
+
+        <div className="zb-tlacidla">
+          {!cistitPotvrd ? (
+            <button className="zb-cistit"
+                    onClick={() => setCistitPotvrd(true)}
+                    disabled={pracuje || bezi}
+                    title={bezi ? 'Najprv nechaj dobehnúť zber' : ''}>
+              Vyčistiť inzeráty…
+            </button>
+          ) : (
+            <>
+              <button className="zb-cistit-potvrd"
+                      onClick={async () => {
+                        setCistitPotvrd(false);
+                        await akcia('vycistit', { potvrdene: true });
+                      }}
+                      disabled={pracuje}>
+                {pracuje ? 'Mažem…' : 'Naozaj zmazať všetko'}
+              </button>
+              <button className="zb-opakovat"
+                      onClick={() => setCistitPotvrd(false)}
+                      disabled={pracuje}>
+                Zrušiť
+              </button>
+            </>
           )}
         </div>
       </section>

@@ -222,3 +222,25 @@
   cursor: pointer;
 }
 .zb-opakovat:disabled { opacity: .45; cursor: default; }
+
+/* Čistenie databázy — oddelené od bežných akcií, aby sa naň nekliklo
+   pri mierení na tlačidlá zberu. */
+.zb-nebezpecne {
+  border: 1px solid color-mix(in srgb, var(--bad) 35%, transparent);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.zb-nebezpecne h2 { color: var(--bad); }
+
+.zb-cistit, .zb-cistit-potvrd {
+  min-height: var(--dotyk);
+  padding: 0 16px;
+  border: 1px solid var(--bad);
+  border-radius: var(--radius);
+  font: inherit;
+  cursor: pointer;
+}
+.zb-cistit { background: var(--bg); color: var(--bad); }
+/* Potvrdzovacie tlačidlo je plné — je to posledný krok pred zmazaním. */
+.zb-cistit-potvrd { background: var(--bad); color: #fff; border-color: var(--bad); }
+.zb-cistit:disabled, .zb-cistit-potvrd:disabled { opacity: .45; cursor: default; }

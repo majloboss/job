@@ -5,6 +5,7 @@
 // POST ?akcia=spustit     spusti zber { source_id, dni, limit, bez_detailov }
 // POST ?akcia=vytazit     pusti model nad uz stiahnutymi inzeratmi { limit }
 // POST ?akcia=zrusit      oznaci bezuci beh za zruseny { run_id }
+// POST ?akcia=vycistit    zmaze vsetky inzeraty, aby sa dali stiahnut odznova
 // POST ?akcia=kniznice     doinstaluje Python kniznice pre scraper
 //
 // Zber je dvojkrokovy a oba kroky sa spustaju samostatne — stahovanie
@@ -273,6 +274,55 @@ if ($akcia === 'zrusit') {
 
     if ($st->rowCount() === 0) json_error('Beh nebeží alebo neexistuje', 404);
     json_ok(['sprava' => 'Beh #' . $runId . ' označený za zrušený']);
+}
+
+// ------------------------------------------------------------
+// POST ?akcia=vycistit — zmaze vsetky inzeraty, aby sa dali stiahnut odznova
+//
+// Rovnaka operacia ako tools/vycisti_inzeraty.cjs, len dostupna z obrazovky:
+// pri ladeni scrapera sa DB cisti casto a spustat kvoli tomu skript na
+// pracovnej stanici je zbytocna zachadzka.
+//
+// Vysledky testu modelov ZOSTAVAJU — su to porovnania modelov, nie zbierane
+// data, a ich opatovne ziskanie stoji peniaze.
+//
+// Vsetko v jednej transakcii: pri ciastocnom zmazani by zostali inzeraty bez
+// obsahu alebo behy bez inzeratov a prehlad by klamal.
+// ------------------------------------------------------------
+if ($akcia === 'vycistit') {
+    // Bezny "zmazat vsetko" nema undo, preto sa vyzaduje vyslovne potvrdenie
+    // z obrazovky — aby sa to nedalo spustit omylom zle mierenym klikom.
+    if (empty($vstup['potvrdene'])) {
+        json_error('Chýba potvrdenie zmazania', 400);
+    }
+
+    $pocty = $pdo->query(
+        "SELECT (SELECT COUNT(*) FROM job.offers)         AS inzeratov,
+                (SELECT COUNT(*) FROM job.offer_content)  AS obsahu,
+                (SELECT COUNT(*) FROM job.ai_evaluations
+                  WHERE ucel = 'parse')                   AS vytazeni,
+                (SELECT COUNT(*) FROM job.scrape_runs)    AS behov")
+        ->fetch(PDO::FETCH_ASSOC);
+
+    try {
+        $pdo->beginTransaction();
+        // ai_evaluations maju kaskadu cez offer_id, ale riadky z laboratoria
+        // maju offer_id NULL — tie by zostali. Mazu sa len tie od zberu.
+        $pdo->exec("DELETE FROM job.ai_evaluations WHERE ucel = 'parse'");
+        $pdo->exec('DELETE FROM job.offers');
+        $pdo->exec('DELETE FROM job.scrape_runs');
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        json_error('Čistenie zlyhalo: ' . $e->getMessage(), 500);
+    }
+
+    json_ok([
+        'sprava' => sprintf(
+            'Zmazaných %d inzerátov, %d uložených HTML, %d výsledkov ťaženia, %d behov zberu.',
+            $pocty['inzeratov'], $pocty['obsahu'], $pocty['vytazeni'], $pocty['behov']),
+        'zmazane' => $pocty,
+    ]);
 }
 
 // ------------------------------------------------------------
