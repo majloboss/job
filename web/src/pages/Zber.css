@@ -56,6 +56,15 @@
 .zb-cislo span   { font-size: 12px; color: var(--muted); }
 .zb-cislo.caka   { border-color: var(--warn); }
 
+/* Rozpad celkoveho poctu na aktivne a uzavrete. */
+.zb-podrobnost {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-style: normal;
+  opacity: .75;
+}
+
 /* --- kroky --- */
 .zb-krok {
   border: 1px solid var(--line);

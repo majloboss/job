@@ -35,25 +35,34 @@ if ($method === 'GET') {
     $behy = $st->fetchAll();
 
     // Kolko inzeratov caka na vytazenie modelom — druhy krok zberu.
+    // Len AKTIVNE — tazenie uzavrete preskakuje (api/cron/zber.php), takze
+    // ratat ich sem by slubovalo pracu, ktora sa nikdy neurobi.
     $caka = (int)$pdo->query(
         "SELECT COUNT(*) FROM job.offers o
-          WHERE o.detail_fetched_at IS NOT NULL
+          WHERE o.detail_fetched_at IS NOT NULL AND o.is_active
             AND NOT EXISTS (SELECT 1 FROM job.ai_evaluations e
                              WHERE e.offer_id = o.id AND e.ucel = 'parse'
                                AND e.status = 'ok')")->fetchColumn();
 
+    // Pocita sa zo VSETKYCH inzeratov, nie len z aktivnych. Dlazdice predtym
+    // filtrovali na is_active, zatial co "caka na vytazenie" nizsie ratalo aj
+    // uzavrete — obrazovka tak ukazovala 66 inzeratov a zaroven 140 cakajucich.
+    // Uzavrete su vo vlastnom udaji, aby bolo vidiet, z coho sa cislo sklada.
     $stav = $pdo->query(
         "SELECT COUNT(*) AS inzeratov,
+                COUNT(*) FILTER (WHERE is_active) AS aktivnych,
+                COUNT(*) FILTER (WHERE NOT is_active) AS uzavretych,
                 COUNT(*) FILTER (WHERE detail_fetched_at IS NOT NULL) AS s_detailom,
                 COUNT(*) FILTER (WHERE summary_sk IS NOT NULL) AS vytazenych
-           FROM job.offers WHERE is_active")->fetch();
+           FROM job.offers")->fetch();
 
     // Inzeraty s uspesnym volanim modelu, ale bez zapisaneho suhrnu. Bezny
     // dotaz "co treba vytazit" ich preskakuje (uspesnu evaluaciu maju),
     // takze by inak zostali navzdy neuplne.
     $neuplnych = (int)$pdo->query(
         "SELECT COUNT(*) FROM job.offers o
-          WHERE o.detail_fetched_at IS NOT NULL AND o.summary_sk IS NULL
+          WHERE o.detail_fetched_at IS NOT NULL AND o.is_active
+            AND o.summary_sk IS NULL
             AND EXISTS (SELECT 1 FROM job.ai_evaluations e
                          WHERE e.offer_id = o.id AND e.ucel = 'parse'
                            AND e.status = 'ok')")->fetchColumn();

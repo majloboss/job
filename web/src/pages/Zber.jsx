@@ -110,9 +110,18 @@ export default function Zber() {
       {/* --- stav databázy --- */}
       {stav && (
         <div className="zb-stav">
+          {/* Uzavreté sa ukazujú zvlášť — na Arive tvoria väčšinu zoznamu
+              a bez toho nesedelo číslo v dlaždici s počtom čakajúcich. */}
           <div className="zb-cislo">
             <strong>{stav.inzeratov}</strong>
-            <span>inzerátov v DB</span>
+            <span>
+              inzerátov v DB
+              {stav.uzavretych > 0 && (
+                <em className="zb-podrobnost">
+                  {stav.aktivnych} aktívnych, {stav.uzavretych} uzavretých
+                </em>
+              )}
+            </span>
           </div>
           <div className="zb-cislo">
             <strong>{stav.s_detailom}</strong>
