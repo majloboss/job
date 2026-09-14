@@ -30,6 +30,8 @@ export default function Zber() {
   const [pracuje, setPracuje] = useState(false);
   // Čistenie sa potvrdzuje druhým klikom — zmazanie sa nedá vrátiť.
   const [cistitPotvrd, setCistitPotvrd] = useState(false);
+  // Prázdne = všetky portály; inak id jedného portálu.
+  const [cistitPortal, setCistitPortal] = useState('');
 
   const [sourceId, setSourceId] = useState('');
   const [dni, setDni]           = useState(1);
@@ -234,11 +236,25 @@ export default function Zber() {
       <section className="zb-nebezpecne">
         <h2>Vyčistiť databázu</h2>
         <p className="zb-popis">
-          Zmaže všetky inzeráty, uložené HTML, výsledky ťaženia a históriu
-          behov. Výsledky testu modelov zostanú.
+          Zmaže inzeráty, uložené HTML, výsledky ťaženia a históriu behov.
+          Výsledky testu modelov zostanú.
         </p>
 
-        <div className="zb-tlacidla">
+        <div className="zb-nastavenia">
+          {/* Pri ladení scrapera sa opakovane preberá jeden portál — mazať
+              kvôli nemu aj ostatné by znamenalo sťahovať ich odznova. */}
+          <label>
+            <span>Rozsah</span>
+            <select value={cistitPortal}
+                    onChange={e => { setCistitPortal(e.target.value); setCistitPotvrd(false); }}
+                    disabled={pracuje || bezi}>
+              <option value="">všetky portály</option>
+              {(dta?.portaly ?? []).map(p => (
+                <option key={p.id} value={p.id}>len {p.name}</option>
+              ))}
+            </select>
+          </label>
+
           {!cistitPotvrd ? (
             <button className="zb-cistit"
                     onClick={() => setCistitPotvrd(true)}
@@ -251,10 +267,15 @@ export default function Zber() {
               <button className="zb-cistit-potvrd"
                       onClick={async () => {
                         setCistitPotvrd(false);
-                        await akcia('vycistit', { potvrdene: true });
+                        await akcia('vycistit', {
+                          potvrdene: true,
+                          source_id: cistitPortal ? Number(cistitPortal) : 0,
+                        });
                       }}
                       disabled={pracuje}>
-                {pracuje ? 'Mažem…' : 'Naozaj zmazať všetko'}
+                {pracuje ? 'Mažem…' : cistitPortal
+                  ? `Naozaj zmazať ${nazovPortalu(dta, cistitPortal)}`
+                  : 'Naozaj zmazať všetko'}
               </button>
               <button className="zb-opakovat"
                       onClick={() => setCistitPotvrd(false)}
@@ -358,4 +379,11 @@ function cas(iso) {
   const t = d.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' });
   if (d.toDateString() === dnes.toDateString()) return t;
   return d.toLocaleDateString('sk-SK', { day: 'numeric', month: 'numeric' }) + ' ' + t;
+}
+
+// Názov portálu do potvrdzovacieho tlačidla — aby bolo pred zmazaním jasné,
+// čoho sa to týka.
+function nazovPortalu(dta, id) {
+  const p = (dta?.portaly ?? []).find(x => String(x.id) === String(id));
+  return p ? p.name : 'vybraný portál';
 }

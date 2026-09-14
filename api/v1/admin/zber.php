@@ -359,21 +359,55 @@ if ($akcia === 'vycistit') {
         json_error('Chýba potvrdenie zmazania', 400);
     }
 
-    $pocty = $pdo->query(
-        "SELECT (SELECT COUNT(*) FROM job.offers)         AS inzeratov,
-                (SELECT COUNT(*) FROM job.offer_content)  AS obsahu,
-                (SELECT COUNT(*) FROM job.ai_evaluations
-                  WHERE ucel = 'parse')                   AS vytazeni,
-                (SELECT COUNT(*) FROM job.scrape_runs)    AS behov")
-        ->fetch(PDO::FETCH_ASSOC);
+    // Bez source_id sa maze vsetko; s nim len jeden portal. Pri ladeni
+    // scrapera sa opakovane preberá jeden portal a zmazat kvoli nemu aj
+    // ostatne by znamenalo stahovat ich odznova.
+    $sourceId = (int)($vstup['source_id'] ?? 0);
+    $portal   = null;
+    if ($sourceId) {
+        $st = $pdo->prepare('SELECT name FROM job.sources WHERE id = ?');
+        $st->execute([$sourceId]);
+        $portal = $st->fetchColumn();
+        if (!$portal) json_error('Portál sa nenašiel', 400);
+    }
+
+    // Vsetky pocty vychadzaju z tej istej mnoziny inzeratov, takze staci
+    // jedna podmienka; pomenovany parameter sa da zopakovat vo viacerych
+    // poddotazoch bez toho, aby sa viazal zvlast pre kazdy.
+    $kde = $sourceId ? 'o.source_id = :sid' : 'TRUE';
+    $st  = $pdo->prepare(
+        "SELECT (SELECT COUNT(*) FROM job.offers o WHERE $kde) AS inzeratov,
+                (SELECT COUNT(*) FROM job.offer_content c
+                   JOIN job.offers o ON o.id = c.offer_id
+                  WHERE $kde) AS obsahu,
+                (SELECT COUNT(*) FROM job.ai_evaluations e
+                   JOIN job.offers o ON o.id = e.offer_id
+                  WHERE e.ucel = 'parse' AND $kde) AS vytazeni,
+                (SELECT COUNT(*) FROM job.scrape_runs r
+                  WHERE " . ($sourceId ? 'r.source_id = :sid' : 'TRUE') . ") AS behov");
+    $st->execute($sourceId ? ['sid' => $sourceId] : []);
+    $pocty = $st->fetch(PDO::FETCH_ASSOC);
 
     try {
         $pdo->beginTransaction();
         // ai_evaluations maju kaskadu cez offer_id, ale riadky z laboratoria
         // maju offer_id NULL — tie by zostali. Mazu sa len tie od zberu.
-        $pdo->exec("DELETE FROM job.ai_evaluations WHERE ucel = 'parse'");
-        $pdo->exec('DELETE FROM job.offers');
-        $pdo->exec('DELETE FROM job.scrape_runs');
+        if ($sourceId) {
+            $st = $pdo->prepare(
+                "DELETE FROM job.ai_evaluations e
+                  WHERE e.ucel = 'parse'
+                    AND EXISTS (SELECT 1 FROM job.offers o
+                                 WHERE o.id = e.offer_id AND o.source_id = ?)");
+            $st->execute([$sourceId]);
+            $pdo->prepare('DELETE FROM job.offers WHERE source_id = ?')
+                ->execute([$sourceId]);
+            $pdo->prepare('DELETE FROM job.scrape_runs WHERE source_id = ?')
+                ->execute([$sourceId]);
+        } else {
+            $pdo->exec("DELETE FROM job.ai_evaluations WHERE ucel = 'parse'");
+            $pdo->exec('DELETE FROM job.offers');
+            $pdo->exec('DELETE FROM job.scrape_runs');
+        }
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
@@ -382,8 +416,9 @@ if ($akcia === 'vycistit') {
 
     json_ok([
         'sprava' => sprintf(
-            'Zmazaných %d inzerátov, %d uložených HTML, %d výsledkov ťaženia, %d behov zberu.',
-            $pocty['inzeratov'], $pocty['obsahu'], $pocty['vytazeni'], $pocty['behov']),
+            'Zmazaných %d inzerátov%s, %d uložených HTML, %d výsledkov ťaženia, %d behov zberu.',
+            $pocty['inzeratov'], $portal ? ' z portálu ' . $portal : '',
+            $pocty['obsahu'], $pocty['vytazeni'], $pocty['behov']),
         'zmazane' => $pocty,
     ]);
 }
