@@ -5,6 +5,7 @@
 // POST ?akcia=spustit     spusti zber { source_id, dni, limit, bez_detailov }
 // POST ?akcia=vytazit     pusti model nad uz stiahnutymi inzeratmi { limit }
 // POST ?akcia=zrusit      oznaci bezuci beh za zruseny { run_id }
+// POST ?akcia=doplnit     vytazi udaje z uz ulozeneho HTML { portal }
 // POST ?akcia=vycistit    zmaze vsetky inzeraty, aby sa dali stiahnut odznova
 // POST ?akcia=kniznice     doinstaluje Python kniznice pre scraper
 //
@@ -274,6 +275,59 @@ if ($akcia === 'zrusit') {
 
     if ($st->rowCount() === 0) json_error('Beh nebeží alebo neexistuje', 404);
     json_ok(['sprava' => 'Beh #' . $runId . ' označený za zrušený']);
+}
+
+// ------------------------------------------------------------
+// POST ?akcia=doplnit — vytazi udaje z uz ulozeneho HTML
+//
+// Po zmene parsera v scraperi netreba stahovat znova: HTML uz mame a portal
+// by sa zbytocne zatazil. Doplni sa uvazok, lokalita, rezim a mzda tam, kde
+// stlpce zostali prazdne.
+//
+// Bezi na popredi, nie ako samostatny proces — ide len o citanie ulozeneho
+// HTML, cize sekundy, nie minuty ako zber.
+// ------------------------------------------------------------
+if ($akcia === 'doplnit') {
+    $python = zber_najdi_python();
+    if ($python === null || !zber_kniznice_su()) {
+        json_error('Na serveri nie je Python alebo chýbajú knižnice — spusti: '
+                 . 'python scraper/zber_vsetky.py --doplnit-udaje', 501);
+    }
+
+    $skript = dirname(__DIR__, 3) . '/scraper/zber_vsetky.py';
+    if (!is_file($skript)) json_error('scraper/zber_vsetky.py na serveri chýba', 500);
+
+    $prikaz = [$python, $skript, '--doplnit-udaje'];
+    if (!empty($vstup['portal'])) {
+        $prikaz[] = '--portal';
+        $prikaz[] = (string)$vstup['portal'];
+    }
+
+    $env = [
+        'PYTHONPATH' => dirname(__DIR__, 2) . '/pylibs',
+        'HOME'       => sys_get_temp_dir(),
+        'PATH'       => '/usr/local/bin:/usr/bin:/bin',
+        'LANG'       => 'sk_SK.UTF-8',
+    ];
+    $popis  = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+    $proces = @proc_open($prikaz, $popis, $rury, null, $env);
+    if (!is_resource($proces)) json_error('Doplnenie sa nepodarilo spustiť', 500);
+
+    $vystup = stream_get_contents($rury[1]) . stream_get_contents($rury[2]);
+    fclose($rury[1]);
+    fclose($rury[2]);
+    $kod = proc_close($proces);
+
+    if ($kod !== 0) {
+        json_error('Doplnenie zlyhalo: ' . mb_substr(trim($vystup), -500), 500);
+    }
+
+    // Zo suhrnu scrapera staci riadok HOTOVO — cely vypis je pre log.
+    $sprava = 'Údaje doplnené.';
+    if (preg_match('/^HOTOVO:.*$/m', $vystup, $m)) {
+        $sprava = trim($m[0]);
+    }
+    json_ok(['sprava' => $sprava, 'vystup' => trim($vystup)]);
 }
 
 // ------------------------------------------------------------

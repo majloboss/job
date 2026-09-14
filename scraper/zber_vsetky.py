@@ -22,6 +22,7 @@ Pouzitie:
     python scraper/zber_vsetky.py --limit 20      menej na portal
     python scraper/zber_vsetky.py --portal koderia   iba jeden portal
     python scraper/zber_vsetky.py --bez-detailov  len zoznamy, detaily nestahovat
+    python scraper/zber_vsetky.py --doplnit-udaje  vytaz udaje z uz ulozeneho HTML
 
 Vyzaduje: pip install requests psycopg2-binary
 """
@@ -749,11 +750,66 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov, run_id=None):
 # ============================================================
 # Hlavny beh
 # ============================================================
+def doplnit_udaje(conn, kod_portalu=None):
+    """
+    Vytazi zakladne udaje z HTML, ktore uz je v DB.
+
+    Po zmene parsera netreba stahovat znova — HTML uz mame a portal by sa
+    zbytocne zatazil. Prazdne stlpce sa tak daju doplnit aj spatne.
+    """
+    cur = conn.cursor()
+    sql = """SELECT o.id, c.html_full
+               FROM job.offers o
+               JOIN job.offer_content c ON c.offer_id = o.id AND c.is_original
+              WHERE c.html_full IS NOT NULL"""
+    params = []
+    if kod_portalu:
+        sql += " AND o.source_id = (SELECT id FROM job.sources WHERE code = %s)"
+        params.append(kod_portalu)
+    sql += " ORDER BY o.id"
+
+    cur.execute(sql, params)
+    riadky = cur.fetchall()
+    print("Inzeratov s ulozenym HTML: %d" % len(riadky))
+
+    doplnenych = bez_udajov = chyb = 0
+    for offer_id, h in riadky:
+        try:
+            if uloz_udaje(cur, offer_id, h):
+                doplnenych += 1
+            else:
+                bez_udajov += 1
+            conn.commit()
+        except Exception as e:
+            chyb += 1
+            conn.rollback()
+            print("  CHYBA #%s: %s" % (offer_id, str(e)[:80]))
+
+    # Agenturny priznak vyplyva z portalu — doplni sa rovno tu, aby sa
+    # kvoli nemu nemusel spustat dalsi krok.
+    cur.execute("""
+        UPDATE job.offers o SET is_agency_offer = TRUE
+          FROM job.sources s
+         WHERE s.id = o.source_id AND s.je_agentura
+           AND o.is_agency_offer IS NOT TRUE
+    """)
+    oznacenych = cur.rowcount
+    conn.commit()
+    cur.close()
+
+    print("HOTOVO: %d doplnenych, %d bez rozpoznatelnych udajov, %d chyb"
+          % (doplnenych, bez_udajov, chyb))
+    if oznacenych:
+        print("        %d inzeratov oznacenych ako agenturne" % oznacenych)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Zber zo vsetkych portalov")
     ap.add_argument("--limit", type=int, default=50, help="max. ponuk na portal")
     ap.add_argument("--portal", help="iba jeden portal (kod z job.sources)")
     ap.add_argument("--bez-detailov", action="store_true")
+    ap.add_argument("--doplnit-udaje", action="store_true",
+                    help="nestahuj nic, len vytaz udaje z uz ulozeneho HTML")
     # Ked zber spusta obrazovka, beh uz v DB existuje a skript ho ma prevziat.
     # Inak by vznikli dva zaznamy: jeden prazdny z obrazovky a jeden skutocny.
     ap.add_argument("--run-id", type=int, default=None,
@@ -762,6 +818,12 @@ def main():
 
     conn = pripoj_db()
     conn.autocommit = False
+
+    if args.doplnit_udaje:
+        doplnit_udaje(conn, args.portal)
+        conn.close()
+        return
+
     cur = conn.cursor()
 
     # LinkedIn a spol. sa preskakuju — vyzaduju prihlasenie a obsah dotahuju

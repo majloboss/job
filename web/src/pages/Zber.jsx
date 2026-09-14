@@ -195,6 +195,16 @@ export default function Zber() {
             {pracuje ? 'Spúšťam…' : `Vyťažiť (${Math.min(caka || 0, 100)})`}
           </button>
 
+          {/* Údaje, ktoré portál uvádza ako číselník, vie prečítať scraper
+              bez modelu. Po zmene parsera netreba sťahovať znova — HTML už
+              máme uložené. */}
+          <button className="zb-opakovat"
+                  onClick={() => akcia('doplnit', {})}
+                  disabled={pracuje}
+                  title="Vyťaží úväzok, lokalitu, režim a mzdu z už stiahnutého HTML">
+            Doplniť údaje zo zdroja
+          </button>
+
           {/* Inzeráty, kde model odpovedal, ale údaje sa nezapísali. Bežné
               ťaženie ich preskakuje — majú úspešné volanie. */}
           {neuplnych > 0 && (
