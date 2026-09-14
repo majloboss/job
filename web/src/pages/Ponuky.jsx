@@ -275,7 +275,9 @@ export default function Ponuky() {
                       <button type="button" className="pon-titul"
                               onClick={() => prepniDetail(o.id)}
                               aria-expanded={!!det}>
-                        <span className="pon-znak">{det ? '▾' : '▸'}</span>
+                        {/* Šípka len pri rozkliknutom — pri každom riadku
+                            robila zo zoznamu neprehľadnú mriežku. */}
+                        {det && <span className="pon-znak">▾</span>}
                         {o.title_sk || o.title}
                       </button>
                       {o.is_active === false && (

@@ -113,7 +113,7 @@
   cursor: pointer;
 }
 .pon-titul:hover { color: var(--accent); }
-.pon-znak { display: inline-block; width: 14px; color: var(--muted); }
+.pon-znak { display: inline-block; width: 14px; color: var(--ok); }
 
 /* Portal vedie priamo na povodny inzerat. */
 .pon-portal { color: var(--accent); text-decoration: none; }
@@ -203,13 +203,19 @@
 /* ============================================================
    DETAIL — rozbaleny pod riadkom
    ============================================================ */
-.pon-tabulka tr.otvoreny { background: var(--panel); }
-.pon-detail-riadok > td { padding: 0 !important; background: var(--panel); }
+/* Rozkliknutý riadok aj jeho detail su jemne zelene — v dlhom zozname sa
+   tak hned vidi, co je otvorene, bez sipky pri kazdom riadku. */
+.pon-tabulka tr.otvoreny { background: color-mix(in srgb, var(--ok) 9%, transparent); }
+.pon-tabulka tr.otvoreny .pon-titul { color: var(--ok); }
+.pon-detail-riadok > td {
+  padding: 0 !important;
+  background: color-mix(in srgb, var(--ok) 6%, transparent);
+}
 
 .pon-detail {
   position: relative;
-  background: var(--panel);
-  border-left: 3px solid var(--accent);
+  background: transparent;
+  border-left: 3px solid var(--ok);
   padding: 16px 18px 20px;
 }
 
@@ -247,7 +253,7 @@
 
 .pon-sumar-detail {
   padding: 10px 12px;
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--ok);
   background: var(--bg);
   border-radius: 0 var(--radius) var(--radius) 0;
   margin: 0 0 14px;
@@ -354,6 +360,13 @@
   .pon-tabulka tr { display: table-row; border: 0; margin: 0; padding: 0; border-radius: 0; }
   .pon-tabulka tr:hover { background: var(--panel); }
   .pon-detail-riadok:hover { background: none; }
+  /* Otvoreny riadok si drzi zelenu aj pod kurzorom — inak by sa pri prejdeni
+     myšou stratilo, ktory je rozkliknuty. Pravidlo je az tu, lebo v CSS
+     vyhrava neskorsie. */
+  .pon-tabulka tr.otvoreny,
+  .pon-tabulka tr.otvoreny:hover {
+    background: color-mix(in srgb, var(--ok) 9%, transparent);
+  }
 
   .pon-tabulka th {
     padding: 8px 10px;
