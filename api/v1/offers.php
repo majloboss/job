@@ -27,6 +27,27 @@ if (!empty($_GET['id'])) {
     $offer = $st->fetch();
     if (!$offer) json_error('Inzerát sa nenašiel', 404);
 
+    // Posudok vhodnosti pre prihlaseneho pouzivatela — druhy krok aplikacie.
+    // Nacitava sa zvlast, nie JOINom k inzeratu: posudok je VZDY osobny,
+    // zatial co inzerat je spolocny, a spojenie by to zamlcalo.
+    $st = $pdo->prepare(
+        'SELECT score, bucket, summary, reasons, model_id, computed_at
+           FROM job.user_offer_match WHERE offer_id = ? AND user_id = ?');
+    $st->execute([(int)$offer['id'], (int)$auth['user_id']]);
+    $posudok = $st->fetch() ?: null;
+
+    if ($posudok) {
+        // Dovody su ulozene ako JSON s tromi zoznamami (pre, proti,
+        // chybajuce zrucnosti) — rozbaluju sa tu, aby si ich obrazovka
+        // nemusela parsovat sama.
+        $d = json_decode((string)$posudok['reasons'], true);
+        $posudok['pros']           = is_array($d['pros'] ?? null) ? $d['pros'] : [];
+        $posudok['cons']           = is_array($d['cons'] ?? null) ? $d['cons'] : [];
+        $posudok['missing_skills'] = is_array($d['missing_skills'] ?? null)
+                                   ? $d['missing_skills'] : [];
+        unset($posudok['reasons']);
+    }
+
     // Originalny text a preklad. Original sa nikdy neprepisuje — preklad je
     // samostatny riadok, takze sa da kedykolvek pregenerovat lepsim modelom.
     $st = $pdo->prepare(
@@ -87,7 +108,7 @@ if (!empty($_GET['id'])) {
         $offer['zber'] = $st->fetchAll();
     }
 
-    json_ok(['offer' => $offer, 'obsah' => $obsah]);
+    json_ok(['offer' => $offer, 'obsah' => $obsah, 'posudok' => $posudok]);
 }
 
 // ------------------------------------------------------------

@@ -260,6 +260,49 @@
   font-size: 15px;
 }
 
+/* --- posudok vhodnosti --- */
+.pon-posudok {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--muted);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin: 0 0 16px;
+  background: var(--bg);
+}
+.pon-posudok.vhodne       { border-left-color: var(--ok); }
+.pon-posudok.menej_vhodne { border-left-color: var(--warn); }
+.pon-posudok.nevhodne     { border-left-color: var(--bad); }
+
+.pon-posudok-hlava {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.pon-posudok-model {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+.pon-posudok-sumar { margin: 0 0 10px; font-size: 14px; line-height: 1.5; }
+
+.pon-posudok-zoznam { margin-bottom: 8px; }
+.pon-posudok-zoznam h4 {
+  margin: 0 0 3px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--muted);
+}
+.pon-posudok-zoznam ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.pon-posudok-zoznam li { margin-bottom: 2px; }
+/* Argumenty pre a proti sa maju rozoznat na prvy pohlad. */
+.pon-posudok-zoznam.pros h4 { color: var(--ok); }
+.pon-posudok-zoznam.cons h4 { color: var(--warn); }
+.pon-posudok-zoznam.missing_skills h4 { color: var(--bad); }
+
 .pon-jazyky { display: flex; gap: 6px; margin: 14px 0 8px; }
 .pon-jazyky button {
   min-height: 36px;

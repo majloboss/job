@@ -36,6 +36,13 @@ const REZIMY = { onsite: 'Na pracovisku', hybrid: 'Hybridne', remote: 'Z domu' }
 // Krátke označenie do tabuľky — plný názov by rozťahoval stĺpec.
 const REZIMY_KRATKO = { onsite: 'pracovisko', hybrid: 'hybrid', remote: 'z domu' };
 
+// Ako model ponuku zaradil. Hranice su v prompte: 0-25, 26-59, 60-100.
+const BUCKETY = {
+  vhodne: 'Vhodná ponuka',
+  menej_vhodne: 'Menej vhodná',
+  nevhodne: 'Nevhodná',
+};
+
 // Preco uz inzerat neplati — scraper to zisti z textu zoznamu.
 const ZATVORENE = {
   obsadene: 'obsadené', zmizol: 'stiahnutý', expiroval: 'expirovaný',
@@ -408,6 +415,11 @@ function Detail({ data, zavri }) {
 
       {o.summary_sk && <p className="pon-sumar-detail">{o.summary_sk}</p>}
 
+      {/* Posudok vhodnosti — druhý krok aplikácie. Je hore, hneď pod
+          údajmi: pri prechádzaní ponúk je to prvé, čo človek chce vedieť,
+          a až potom číta samotný inzerát. */}
+      {data.posudok && <Posudok p={data.posudok} />}
+
       {o.technologies?.length > 0 && (
         <p className="pon-tagy">
           {o.technologies.map(t => <span key={t} className="pon-tag">{t}</span>)}
@@ -454,6 +466,43 @@ function Detail({ data, zavri }) {
       <a className="pon-original" href={o.url} target="_blank" rel="noreferrer noopener">
         Otvoriť originál na {o.source_name} →
       </a>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
+// Posudok vhodnosti pre prihlaseneho pouzivatela.
+//
+// Skore samo o sebe nestaci — bez odovodnenia sa neda posudit, ci sa model
+// nepomylil. Preto sa zobrazuje aj to, co hovori pre a proti.
+// ------------------------------------------------------------
+function Posudok({ p }) {
+  const zoznamy = [
+    ['pros', 'Hovorí pre', p.pros],
+    ['cons', 'Hovorí proti', p.cons],
+    ['missing_skills', 'Chýba', p.missing_skills],
+  ].filter(([, , z]) => z?.length > 0);
+
+  return (
+    <div className={'pon-posudok ' + (p.bucket || '')}>
+      <div className="pon-posudok-hlava">
+        <span className={'pon-skore ' + (p.bucket || '')}>{p.score}</span>
+        <strong>{BUCKETY[p.bucket] || 'Posúdené'}</strong>
+        {p.model_id && (
+          <span className="pon-posudok-model" title={'Posúdil model ' + p.model_id}>
+            {p.model_id.split('/').pop().replace(':free', '')}
+          </span>
+        )}
+      </div>
+
+      {p.summary && <p className="pon-posudok-sumar">{p.summary}</p>}
+
+      {zoznamy.map(([kod, popis, polozky]) => (
+        <div key={kod} className={'pon-posudok-zoznam ' + kod}>
+          <h4>{popis}</h4>
+          <ul>{polozky.map((t, i) => <li key={i}>{t}</li>)}</ul>
+        </div>
+      ))}
     </div>
   );
 }
