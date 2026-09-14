@@ -56,6 +56,11 @@
 .zb-cislo span   { font-size: 12px; color: var(--muted); }
 .zb-cislo.caka   { border-color: var(--warn); }
 
+/* Druha faza kroku — odsadena a bez cisla, aby bolo vidiet, ze patri
+   pod predchadzajuci krok a nie je to samostatny krok. */
+.zb-faza { margin-left: 24px; border-left: 2px solid var(--line); }
+.zb-faza h3 { margin: 0 0 6px; font-size: 15px; }
+
 /* Rozpad celkoveho poctu na aktivne a uzavrete. */
 .zb-podrobnost {
   display: block;

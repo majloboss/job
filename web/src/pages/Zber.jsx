@@ -2,14 +2,18 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../api';
 import './Zber.css';
 
-// Ručné spustenie zberu inzerátov.
+// Ručné spustenie oboch krokov aplikácie.
 //
-// Zber je DVOJKROKOVÝ a oba kroky sa spúšťajú samostatne:
-//   1. Stiahnutie — scraper prejde zoznamy portálu a uloží HTML inzerátov
-//   2. Vyťaženie  — model z uloženého HTML vytiahne mzdu, úväzky, kľúč. slová
+//   1. ZBER      — stiahne inzeráty z portálov a rozparsuje ich do DB
+//                  (dve fázy: sťahovanie HTML a vyťaženie údajov modelom)
+//   2. VHODNOSŤ  — posúdi ponuky voči životopisu a preferenciám
 //
-// Oddelenie je zámerné: ťaženie sa dá zopakovať lepším promptom bez
-// opätovného sťahovania z portálu.
+// Delenie nie je len poriadok v kóde: zber beží RAZ za inzerát a je spoločný
+// pre všetkých, vhodnosť beží za KAŽDÉHO používateľa zvlášť. Náklady preto
+// rastú inak a každý krok má vlastné modely aj rozpočet.
+//
+// Obe fázy zberu sa spúšťajú samostatne, aby sa dalo parsovanie zopakovať
+// lepším promptom bez opätovného sťahovania z portálu.
 
 const OBDOBIA = [
   { dni: 1,  text: 'posledný deň' },
@@ -85,6 +89,8 @@ export default function Zber() {
 
   const stav      = dta?.stav;
   const caka      = dta?.caka ?? 0;
+  const vhCaka       = Number(dta?.vhodnost?.caka ?? 0);
+  const vhPosudenych = Number(dta?.vhodnost?.posudenych ?? 0);
   const neuplnych = dta?.neuplnych ?? 0;
   const maPython = dta?.python;
 
@@ -136,9 +142,9 @@ export default function Zber() {
         </div>
       )}
 
-      {/* --- krok 1: stiahnutie --- */}
+      {/* --- krok 1: zber --- */}
       <section className="zb-krok">
-        <h2><span className="zb-cislo-kroku">1</span> Stiahnuť inzeráty</h2>
+        <h2><span className="zb-cislo-kroku">1</span> Zber inzerátov</h2>
         <p className="zb-popis">
           Prejde zoznamy portálu a stiahne detail tých inzerátov, ktoré ešte nemáme.
           Rešpektuje sa odstup 1,5 s medzi požiadavkami, takže zber trvá minúty.
@@ -182,9 +188,11 @@ export default function Zber() {
         </div>
       </section>
 
-      {/* --- krok 2: vyťaženie --- */}
-      <section className="zb-krok">
-        <h2><span className="zb-cislo-kroku">2</span> Vyťažiť údaje modelom</h2>
+      {/* Rozparsovanie je DRUHA FAZA zberu, nie samostatny krok: vysledkom
+          kroku 1 je inzerat rozlozeny na udaje v DB. Spusta sa zvlast len
+          preto, aby sa dalo zopakovat lepsim promptom bez stahovania. */}
+      <section className="zb-krok zb-faza">
+        <h3>Rozparsovať údaje modelom</h3>
         <p className="zb-popis">
           Model z uloženého HTML vytiahne mzdu, úväzky, kľúčové slová a súhrn.
           Dá sa spustiť opakovane — s lepším promptom bez sťahovania z portálu.
@@ -224,6 +232,58 @@ export default function Zber() {
                     disabled={pracuje}
                     title="Model odpovedal, ale údaje sa do inzerátu nezapísali">
               Doplniť neúplné ({neuplnych})
+            </button>
+          )}
+        </div>
+      </section>
+
+      {/* --- krok 2: vhodnosť --- */}
+      <section className="zb-krok">
+        <h2><span className="zb-cislo-kroku">2</span> Vyhodnotiť vhodnosť</h2>
+        <p className="zb-popis">
+          Model porovná ponuky s tvojím životopisom a preferenciami a zapíše
+          skóre s odôvodnením. Beží za teba — náklady rastú s počtom ponúk,
+          nie s počtom portálov.
+        </p>
+
+        {vhCaka > 0 ? (
+          <p className="zb-caka-info">
+            Na vyhodnotenie čaká <strong>{vhCaka}</strong>{' '}
+            {vhCaka === 1 ? 'ponuka' : vhCaka < 5 ? 'ponuky' : 'ponúk'}
+            {vhPosudenych > 0 && `, posúdených ${vhPosudenych}`}.
+          </p>
+        ) : (
+          <p className="zb-popis">
+            {vhPosudenych > 0
+              ? `Všetkých ${vhPosudenych} ponúk je vyhodnotených.`
+              : 'Zatiaľ nie je čo vyhodnocovať — najprv zozbieraj inzeráty.'}
+          </p>
+        )}
+
+        <div className="zb-tlacidla">
+          {/* Bez limitu = všetky ponuky v DB. Po zmene preferencií alebo
+              životopisu má zmysel prejsť celú databázu, nie len nové. */}
+          <button className="zb-spustit"
+                  onClick={() => akcia('vhodnost', { limit: 0 })}
+                  disabled={pracuje || vhCaka === 0}>
+            {pracuje ? 'Spúšťam…' : `Vyhodnotiť všetky (${vhCaka})`}
+          </button>
+
+          <button className="zb-opakovat"
+                  onClick={() => akcia('vhodnost', { limit: 20 })}
+                  disabled={pracuje || vhCaka === 0}
+                  title="Najprv na malej vzorke — chyba sa prejaví na 20, nie na stovkách">
+            Skúsiť 20
+          </button>
+
+          {/* Prepočet už posúdených: preferencie sa menia a staré skóre
+              by potom neplatilo. */}
+          {vhPosudenych > 0 && (
+            <button className="zb-opakovat"
+                    onClick={() => akcia('vhodnost', { limit: 0, znova: true })}
+                    disabled={pracuje}
+                    title="Prepočíta aj ponuky, ktoré už posudok majú">
+              Prepočítať všetko ({vhPosudenych + vhCaka})
             </button>
           )}
         </div>

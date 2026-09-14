@@ -5,6 +5,7 @@
 // POST ?akcia=spustit     spusti zber { source_id, dni, limit, bez_detailov }
 // POST ?akcia=vytazit     pusti model nad uz stiahnutymi inzeratmi { limit }
 // POST ?akcia=zrusit      oznaci bezuci beh za zruseny { run_id }
+// POST ?akcia=vhodnost    posudi ponuky voci CV a preferenciam { limit, znova }
 // POST ?akcia=doplnit     vytazi udaje z uz ulozeneho HTML { portal }
 // POST ?akcia=vycistit    zmaze vsetky inzeraty, aby sa dali stiahnut odznova
 // POST ?akcia=kniznice     doinstaluje Python kniznice pre scraper
@@ -67,11 +68,24 @@ if ($method === 'GET') {
                          WHERE e.offer_id = o.id AND e.ucel = 'parse'
                            AND e.status = 'ok')")->fetchColumn();
 
+    // Stav druheho kroku: kolko ponuk uz ma posudok a kolko nan caka.
+    // Pocita sa za prihlaseneho pouzivatela — vhodnost je vzdy jeho.
+    $vhodnost = $pdo->prepare(
+        "SELECT COUNT(*) FILTER (WHERE m.user_id IS NOT NULL) AS posudenych,
+                COUNT(*) FILTER (WHERE m.user_id IS NULL)     AS caka
+           FROM job.offers o
+           JOIN job.offer_content c ON c.offer_id = o.id AND c.is_original
+           LEFT JOIN job.user_offer_match m
+                  ON m.offer_id = o.id AND m.user_id = ?
+          WHERE o.is_active AND c.text_full IS NOT NULL");
+    $vhodnost->execute([(int)$auth['user_id']]);
+
     json_ok([
         'behy'      => $behy,
         'caka'      => $caka,
         'neuplnych' => $neuplnych,
         'stav'      => $stav,
+        'vhodnost'  => $vhodnost->fetch(),
         'portaly' => $pdo->query(
             'SELECT id, code, name, default_period_days
                FROM job.sources WHERE is_active ORDER BY name')->fetchAll(),
@@ -284,6 +298,48 @@ if ($akcia === 'zrusit') {
 
     if ($st->rowCount() === 0) json_error('Beh nebeží alebo neexistuje', 404);
     json_ok(['sprava' => 'Beh #' . $runId . ' označený za zrušený']);
+}
+
+// ------------------------------------------------------------
+// POST ?akcia=vhodnost — posudi ponuky voci CV a preferenciam
+//
+// DRUHY krok aplikacie. Bezi samostatne od zberu, lebo ma ine naklady:
+// zber bezi raz za inzerat a je spolocny pre vsetkych, vhodnost za kazdeho
+// pouzivatela zvlast.
+//
+// limit 0 znamena vsetky inzeraty v DB — pri prvom spusteni alebo po zmene
+// preferencii sa posudzuje cela databaza, nie len nove ponuky.
+// ------------------------------------------------------------
+if ($akcia === 'vhodnost') {
+    $limit = max(0, min(2000, (int)($vstup['limit'] ?? 0)));
+    $znova = !empty($vstup['znova']);
+
+    $php = null;
+    foreach (['/usr/bin/php', '/usr/local/bin/php', '/opt/php/bin/php', PHP_BINARY] as $c) {
+        if ($c && is_executable($c)) { $php = $c; break; }
+    }
+    if ($php === null || !function_exists('proc_open')) {
+        json_error('Vyhodnotenie sa zo servera spustiť nedá — spusti: '
+                 . 'php api/cron/vhodnost.php', 501);
+    }
+
+    $skript = dirname(__DIR__, 2) . '/cron/vhodnost.php';
+    if (!is_file($skript)) json_error('api/cron/vhodnost.php na serveri chýba', 500);
+
+    $log   = sys_get_temp_dir() . '/job_vhodnost.log';
+    $popis = [1 => ['file', $log, 'w'], 2 => ['file', $log, 'a']];
+    $args  = [$php, $skript];
+    if ($limit > 0) $args[] = '--limit=' . $limit;
+    if ($znova)     $args[] = '--znova';
+
+    $proces = @proc_open($args, $popis, $rury);
+    if (!is_resource($proces)) json_error('Vyhodnotenie sa nepodarilo spustiť', 500);
+    // Proces sa zamerne nezatvara cez proc_close() — to by cakalo na jeho
+    // dokoncenie a HTTP poziadavka by vyprsala.
+
+    json_ok(['sprava' => $limit > 0
+        ? "Vyhodnotenie spustené pre najviac $limit ponúk"
+        : 'Vyhodnotenie spustené pre všetky ponuky v databáze']);
 }
 
 // ------------------------------------------------------------
