@@ -126,7 +126,12 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
 }
-.tm-nazov, .tm-text { white-space: normal; max-width: 220px; }
+.tm-nazov, .tm-text {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .tm-hodnotenie { white-space: normal; max-width: 380px; font-size: 13px; }
 .tm-druhy { color: var(--muted); }
 .tm-zo { color: var(--muted); font-size: 12px; }
@@ -261,7 +266,30 @@
   cursor: pointer;
 }
 
-.tm-jazyk button { min-height: 34px; font-size: 13px; }
+/* Dve jazykové verzie vedľa seba — pri cudzojazyčnom inzeráte je práve
+   porovnanie prekladu s originálom to podstatné. Na úzkom displeji sú
+   pod sebou. */
+.tm-verzie { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.tm-verzia h5 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tm-preklad {
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+@media (min-width: 1000px) {
+  .tm-verzie.dve { grid-template-columns: 1fr 1fr; }
+}
 
 /* ============================================================
    DETAIL — celý vyťažený inzerát

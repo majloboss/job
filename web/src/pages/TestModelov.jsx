@@ -38,7 +38,6 @@ export default function TestModelov() {
   // Otvorených riadkov môže byť VIAC naraz — o to ide: porovnať, čo
   // rôzne modely vytiahli z toho istého inzerátu, bez zatvárania predošlého.
   const [otvorene, setOtvorene] = useState(() => new Set());
-  const [jazyk, setJazyk] = useState('sk');   // ktorú verziu HTML ukázať
 
   const casovacRef = useRef(null);
 
@@ -190,9 +189,12 @@ export default function TestModelov() {
                   <tr key={b.id} className={(behId === b.id ? 'vybrany ' : '') + b.status}
                       onClick={() => setBehId(b.id)}>
                     <td>{b.id}</td>
-                    <td className="tm-nazov" title={b.url1}>
-                      {b.nazov1 || b.url1}
-                      {b.nazov2 && <span className="tm-druhy"> + {b.nazov2}</span>}
+                    <td className="tm-nazov" title={(b.nazov1 || b.url1)
+                        + (b.nazov2 ? ' + ' + b.nazov2 : '')}>
+                      {skrat(b.nazov1 || b.url1, 42)}
+                      {b.nazov2 && (
+                        <span className="tm-druhy"> + {skrat(b.nazov2, 32)}</span>
+                      )}
                     </td>
                     <td>
                       <span className={'tm-stav ' + b.status}>{popisStavu(b.status)}</span>
@@ -283,16 +285,6 @@ export default function TestModelov() {
               Rozbaliť všetky
             </button>
 
-            {/* Pri slovenskom inzeráte sú obe verzie rovnaké — prepínač
-                má zmysel až pri cudzojazyčnom. */}
-            {ulohaTab === 'parse' && (
-              <span className="tm-skupina tm-jazyk">
-                <button className={jazyk === 'sk' ? 'aktivny' : ''}
-                        onClick={() => setJazyk('sk')}>Slovensky</button>
-                <button className={jazyk === 'orig' ? 'aktivny' : ''}
-                        onClick={() => setJazyk('orig')}>Originál</button>
-              </span>
-            )}
           </div>
 
           {vysledky.length === 0 ? (
@@ -323,7 +315,7 @@ export default function TestModelov() {
                 </thead>
                 <tbody>
                   {vysledky.map(v => (
-                    <Riadok key={v.id} v={v} uloha={ulohaTab} jazyk={jazyk}
+                    <Riadok key={v.id} v={v} uloha={ulohaTab}
                             otvoreny={otvorene.has(v.id)}
                             prepni={() => setOtvorene(p => {
                               const n = new Set(p);
@@ -344,7 +336,7 @@ export default function TestModelov() {
 // ------------------------------------------------------------
 // Jeden riadok výsledku + rozkliknutý detail
 // ------------------------------------------------------------
-function Riadok({ v, uloha, jazyk, otvoreny, prepni }) {
+function Riadok({ v, uloha, otvoreny, prepni }) {
   const zlyhal = v.status !== 'ok';
   const stlpcov = uloha === 'parse' ? 11 : 8;
 
@@ -359,13 +351,21 @@ function Riadok({ v, uloha, jazyk, otvoreny, prepni }) {
 
         {uloha === 'parse' ? (
           <>
-            <td className="tm-text">{v.nazov || <span className="tm-nic">—</span>}</td>
-            <td className="tm-text">{v.firma || <span className="tm-nic">—</span>}</td>
+            <td className="tm-text" title={v.nazov || ''}>
+              {skrat(v.nazov, 34) || <span className="tm-nic">—</span>}
+            </td>
+            <td className="tm-text" title={v.firma || ''}>
+              {skrat(v.firma, 28) || <span className="tm-nic">—</span>}
+            </td>
             <td className="cislo">{mzda(v)}</td>
-            <td>{v.mesto || <span className="tm-nic">—</span>}</td>
+            <td title={v.mesto || ''}>
+              {skrat(v.mesto, 18) || <span className="tm-nic">—</span>}
+            </td>
             <td>{(v.uvazky?.length ? v.uvazky.join(', ') : v.uvazok) ||
                  <span className="tm-nic">—</span>}</td>
-            <td>{v.nastup || <span className="tm-nic">—</span>}</td>
+            <td title={v.nastup || ''}>
+              {skrat(v.nastup, 16) || <span className="tm-nic">—</span>}
+            </td>
           </>
         ) : (
           <>
@@ -398,8 +398,11 @@ function Riadok({ v, uloha, jazyk, otvoreny, prepni }) {
               <code>{v.model_id}</code>
               {v.je_free && <span className="tm-free">zadarmo</span>}
               <span className="tm-detail-meta">
-                {v.total_tokens} tok. · {(v.trvanie_ms / 1000).toFixed(1)} s
-                {Number(v.cena_usd) > 0 && ' · $' + Number(v.cena_usd).toFixed(6)}
+                {v.total_tokens} tok. · {(v.trvanie_ms / 1000).toFixed(1)} s ·{' '}
+                {Number(v.cena_usd) > 0
+                  ? '$' + Number(v.cena_usd).toFixed(6)
+                  : 'zadarmo'}
+                {!v.je_free && ` (${Number(v.cena_1m).toFixed(3)} $/1M)`}
               </span>
             </div>
 
@@ -434,16 +437,36 @@ function Riadok({ v, uloha, jazyk, otvoreny, prepni }) {
 
                 {/* Celý inzerát tak, ako ho model prepísal. HTML je na
                     serveri očistené — povolené sú len nadpisy, odseky
-                    a zoznamy, ktoré prompt žiada. */}
+                    a zoznamy, ktoré prompt žiada.
+
+                    Keď sa originál a preklad líšia, ukazujú sa OBA vedľa
+                    seba — pri cudzojazyčnom inzeráte je práve porovnanie
+                    prekladu to podstatné. */}
                 {(v.html_sk || v.html_original) && (
                   <>
-                    <h4>
-                      Inzerát {jazyk === 'sk' ? '(slovensky)' : '(originál)'}
-                    </h4>
-                    <div className="tm-html"
-                         dangerouslySetInnerHTML={{
-                           __html: (jazyk === 'sk' ? v.html_sk : v.html_original)
-                                   || v.html_sk || v.html_original }} />
+                    <h4>Inzerát prepísaný modelom</h4>
+                    <div className={'tm-verzie' + (v.html_sk && v.html_original
+                                    && v.html_sk !== v.html_original ? ' dve' : '')}>
+                      {v.html_sk && (
+                        <div className="tm-verzia">
+                          <h5>
+                            Slovensky
+                            {v.orig_lang && v.orig_lang !== 'sk' && (
+                              <span className="tm-preklad">preklad z {v.orig_lang}</span>
+                            )}
+                          </h5>
+                          <div className="tm-html"
+                               dangerouslySetInnerHTML={{ __html: v.html_sk }} />
+                        </div>
+                      )}
+                      {v.html_original && v.html_original !== v.html_sk && (
+                        <div className="tm-verzia">
+                          <h5>Originál {v.orig_lang ? `(${v.orig_lang})` : ''}</h5>
+                          <div className="tm-html"
+                               dangerouslySetInnerHTML={{ __html: v.html_original }} />
+                        </div>
+                      )}
+                    </div>
                   </>
                 )}
               </div>
@@ -474,6 +497,14 @@ function Riadok({ v, uloha, jazyk, otvoreny, prepni }) {
 }
 
 // ------------------------------------------------------------
+// Skrati text pre tabulku. Cely je vzdy v title a v rozkliknutom detaile —
+// dlhy nazov by inak pretiekol do susedneho stlpca.
+function skrat(t, n) {
+  if (!t) return t;
+  const s = String(t);
+  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+}
+
 function mzda(v) {
   if (v.mzda_min === null && v.mzda_max === null) return v.mzda_text || '—';
   const j = { month: '/mes', hour: '/h', day: '/deň', year: '/rok' }[v.mzda_obdobie] || '';
