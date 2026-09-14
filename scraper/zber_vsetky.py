@@ -182,6 +182,45 @@ def najdi_ponuky_linkedin(html_text):
     return vysledok
 
 
+# profesia.sk ma zoznam v <li class="list-row"> a kazdy udaj vo vlastnom
+# prvku: nazov v .title, zamestnavatel v .employer, miesto v .job-location.
+#
+# Vseobecny parser tu zlyhaval dvakrat: zo stranky bral aj rozcestnik krajov
+# ("Bratislavsky kraj") a ako nazov ponuky zobral text prveho odkazu v karte,
+# co je stitok so mzdou ("1 300 EUR/mesiac"). Ked ma portal takto jasnu
+# strukturu, oplati sa ju precitat priamo.
+RE_PROF_KARTA = re.compile(r'<li class="list-row"[^>]*>(.*?)</li>', re.I | re.S)
+RE_PROF_ODKAZ = re.compile(r'<a\b[^>]*\bhref="([^"]*?/O\d{4,}[^"]*)"', re.I)
+RE_PROF_NAZOV = re.compile(r'<span[^>]*\bclass=\'title\'[^>]*>(.*?)</span>', re.I | re.S)
+
+
+def najdi_ponuky_profesia(html_text, base):
+    """Karty zo zoznamu profesia.sk. Vracia rovnaky tvar ako najdi_ponuky()."""
+    najdene = []
+    videne = set()
+
+    for karta in RE_PROF_KARTA.findall(html_text):
+        m = RE_PROF_ODKAZ.search(karta)
+        if not m:
+            continue
+        url = urljoin(base, html.unescape(m.group(1))).split("?")[0].rstrip("/")
+        if url in videne:
+            continue
+        videne.add(url)
+
+        mn = RE_PROF_NAZOV.search(karta)
+        nazov = ocisti_text(mn.group(1)) if mn else ""
+        if not nazov:
+            nazov = external_id_z_url(url)
+
+        # Profesia neaktualne ponuky zo zoznamu odstranuje, takze priznak
+        # tu prakticky nenastane — hlada sa vsak rovnako ako inde, keby
+        # portal zaviedol oznacenie.
+        najdene.append((url, nazov[:300],
+                        bool(RE_UZAVRETE.search(ocisti_text(karta)))))
+    return najdene
+
+
 # Ponuka, ktora uz nie je aktualna. Portaly to pisu do textu odkazu:
 #   ariva.sk   "Databazovy admin - OBSADENE"
 #   titans.eu  "NEPRIJIMAME ZAUJEMCOV"
@@ -396,12 +435,26 @@ RE_POPIS_HODNOTA = re.compile(
     r"<(dt|th)\b[^>]*>(.*?)</\1>\s*<(dd|td)\b[^>]*>(.*?)</\3>",
     re.I | re.S)
 
+# profesia.sk: <strong>Druh pracovneho pomeru</strong><br><span>plny uvazok</span>
+# Medzi popisom a hodnotou byva <br> aj biele znaky, hodnot moze byt viac
+# za sebou (mzda ma rozsah v jednom span a doplnok v druhom).
+#
+# Hodnota byva vnorena v dalsom span (miesto prace ma jobLocation > address),
+# preto sa neberie po prvom </span>, ale az po zaciatok dalsieho <strong>
+# alebo konca obalujuceho bloku — vnutorne znacky odstrani ocisti_text().
+RE_STRONG_SPAN = re.compile(
+    r"<strong[^>]*>([^<]{2,60})</strong>\s*(?:<br\s*/?>\s*)*"
+    r"((?:<span[^>]*>(?:[^<]|<(?!/?strong)[^>]*>)*?</span>\s*)+)",
+    re.I | re.S)
+
+
 # Ako sa jednotlive polia volaju na roznych portaloch.
 POLIA = {
     "uvazok":   ("pracovny pomer", "pracovný pomer", "forma", "typ pracovneho pomeru",
-                 "druh pracovneho pomeru", "uvazok", "úväzok"),
+                 "druh pracovneho pomeru", "druh pracovného pomeru", "uvazok", "úväzok"),
     "miesto":   ("miesto", "lokalita", "miesto vykonu prace", "miesto práce", "mesto"),
-    "mzda":     ("odmena", "plat", "mzda", "ponukany plat", "ponúkaný plat", "salary"),
+    "mzda":     ("odmena", "plat", "mzda", "ponukany plat", "ponúkaný plat", "salary",
+                 "mzdove podmienky", "mzdové podmienky", "zakladna zlozka mzdy"),
     "homeoffice": ("home office", "homeoffice", "praca z domu", "práca z domu", "remote"),
     "nastup":   ("datum nastupu", "dátum nástupu", "nastup", "nástup", "termin nastupu"),
     "firma":    ("spolocnost", "spoločnosť", "firma", "zamestnavatel", "zamestnávateľ",
@@ -410,8 +463,14 @@ POLIA = {
 
 
 def _kluc(popis):
-    """Popis pola na porovnatelny tvar: bez diakritiky, malymi, bez dvojbodky."""
-    popis = ocisti_text(popis).rstrip(":").strip().lower()
+    """
+    Popis pola na porovnatelny tvar: bez diakritiky, malymi, bez dvojbodky.
+
+    Doplnok v zatvorke sa zahadzuje — profesia.sk pise "Mzdove podmienky
+    (brutto)" a nemalo by zmysel drzat kazdu variantu v zozname nazvov.
+    """
+    popis = ocisti_text(popis)
+    popis = re.sub(r"\s*\([^)]*\)", "", popis).rstrip(":").strip().lower()
     return unicodedata.normalize("NFKD", popis).encode("ascii", "ignore").decode()
 
 
@@ -422,6 +481,7 @@ def udaje_z_detailu(h):
     """
     dvojice = [(p, hod) for p, hod in RE_ARIVA_POLE.findall(h)]
     dvojice += [(p, hod) for _, p, _, hod in RE_POPIS_HODNOTA.findall(h)]
+    dvojice += [(p, hod) for p, hod in RE_STRONG_SPAN.findall(h)]
 
     najdene = {}
     for popis, hodnota in dvojice:
@@ -527,14 +587,83 @@ def mzda_z_textu(text):
 # Miesta su na ariva.sk zlepene medzerami: "Bratislava Senec Zilina".
 # Viacslovne nazvy ("Liptovsky Mikulas") sa tym rozbiju, preto sa delí
 # na dvoch a viac medzerach — tak ich portal oddeluje.
+# Adresa s ulicou: "Mickiewiczova 9, Bratislava" — do lokality patri len
+# mesto, cize posledna cast. Rozpozna sa podla cisla popisneho v prvej casti.
+RE_ULICA = re.compile(r"\d", re.U)
+
+
 def miesta_z_textu(text):
+    """
+    Zoznam miest vykonu prace.
+
+    Portaly ich oddeluju roznym sposobom: ariva.sk niekolkymi medzerami,
+    profesia.sk uvadza jednu adresu s ciarkou medzi ulicou a mestom. Ciarka
+    preto NEDELI na dve lokality — z adresy sa vezme len mesto.
+    """
     if not text:
         return []
-    kusy = re.split(r"\s{2,}|\s*[,;/|]\s*|\s*\u2022\s*", text.strip())
-    return [k.strip() for k in kusy if len(k.strip()) >= 2][:10]
+
+    # Viacero lokalit: oddelovac je viacnasobna medzera, bodkociarka alebo
+    # lomka. Ciarka nie — tu oddeluje casti jednej adresy.
+    casti = [c.strip() for c in re.split(r"\s{2,}|\s*[;/|]\s*|\s*\u2022\s*", text.strip())
+             if c.strip()]
+
+    miesta = []
+    for cast in casti:
+        kusy = [k.strip() for k in cast.split(",") if k.strip()]
+        # Adresa s ulicou: nechaj len poslednu cast, teda mesto.
+        if len(kusy) > 1 and RE_ULICA.search(kusy[0]):
+            kusy = [kusy[-1]]
+        for k in kusy:
+            # Doplnky typu "ubytovanie", "prenajom" ani zvysky cisel nie su
+            # lokality — mesto ma pismena a nema cislo popisne.
+            if len(k) < 2 or RE_ULICA.search(k):
+                continue
+            if k not in miesta:
+                miesta.append(k)
+    return miesta[:10]
 
 
-def uloz_udaje(cur, offer_id, h):
+# Zamestnavatel. profesia.sk ho pise do <h2> hned za <h1> s nazvom pozicie,
+# ale nie vzdy — inzeraty personalnych agentur ten <h2> nemaju. Vtedy ho
+# ma aspon hlavicka zamestnavatela alebo samotna adresa inzeratu
+# (/praca/<firma>/O123456).
+#
+# ariva.sk a spol. zamestnavatela neuvadzaju vobec (su sprostredkovatelia),
+# takze tam zostane prazdny a inzerat sa oznaci ako agenturny.
+RE_FIRMA_H2 = re.compile(r"<h1[^>]*>.*?</h1>\s*<h2[^>]*>(.*?)</h2>", re.I | re.S)
+RE_FIRMA_META = re.compile(
+    r'<meta[^>]*\bproperty="og:site_name"[^>]*\bcontent="([^"]{2,120})"', re.I)
+RE_FIRMA_TRIEDA = re.compile(
+    r'<[a-z]+[^>]*\bclass="[^"]*\b(?:employer|company-name|company-title)\b[^"]*"[^>]*>(.*?)</',
+    re.I | re.S)
+
+
+def firma_z_url(url):
+    """
+    profesia.sk ma v adrese nazov zamestnavatela: /praca/grafton-slovakia/O123.
+    Je to zaloha, ked ho stranka neuvadza v texte — nazov je odvodeny, takze
+    "s.r.o." a diakritika chybaju, ale identifikuje firmu spolahlivo.
+    """
+    m = re.search(r"/praca/([a-z0-9][a-z0-9-]{2,60})/O\d+", url, re.I)
+    if not m:
+        return None
+    return m.group(1).replace("-", " ").strip().title()[:200]
+
+
+def firma_z_detailu(h, url=None):
+    for vzor in (RE_FIRMA_H2, RE_FIRMA_TRIEDA, RE_FIRMA_META):
+        m = vzor.search(h)
+        if not m:
+            continue
+        firma = ocisti_text(m.group(1))
+        # Nazov portalu nie je zamestnavatel.
+        if 2 <= len(firma) <= 200 and "profesia" not in firma.lower():
+            return firma
+    return firma_z_url(url) if url else None
+
+
+def uloz_udaje(cur, offer_id, h, url=None):
     """
     Zapise do ponuky udaje vycitane z detailu.
 
@@ -542,6 +671,10 @@ def uloz_udaje(cur, offer_id, h):
     alebo skorsi beh, necha sa to tak.
     """
     u = udaje_z_detailu(h)
+    if "firma" not in u:
+        firma = firma_z_detailu(h, url)
+        if firma:
+            u["firma"] = firma
     if not u:
         return False
 
@@ -549,6 +682,16 @@ def uloz_udaje(cur, offer_id, h):
     smin, smax, obdobie = mzda_z_textu(u.get("mzda"))
     miesta = miesta_z_textu(u.get("miesto"))
     rezim = rezim_z_homeoffice(u.get("homeoffice"))
+
+    # Texty sa orezavaju na dlzku stlpcov. profesia.sk pise k mzde este cely
+    # odstavec ("+ bonusy a provizie, priemerny plat po zauceni je..."), takze
+    # bez orezania zapis spadne na dlzke salary_raw.
+    firma = (u.get("firma") or None)
+    if firma:
+        firma = firma[:255]
+    mzda_text = (u.get("mzda") or None)
+    if mzda_text:
+        mzda_text = mzda_text[:200]
 
     cur.execute("""
         UPDATE job.offers SET
@@ -567,12 +710,12 @@ def uloz_udaje(cur, offer_id, h):
             updated_at       = NOW()
          WHERE id = %s
     """, (
-        u.get("firma"),
+        firma,
         uvazky[0] if uvazky else None,
         uvazky or None,
         rezim,
         miesta or None,
-        u.get("mzda"),
+        mzda_text,
         smin, smax,
         obdobie if smin else None,
         "EUR" if smin else None,
@@ -581,7 +724,7 @@ def uloz_udaje(cur, offer_id, h):
     return True
 
 
-def uloz_detail(cur, offer_id, h, fetch_ms, fetch_bytes):
+def uloz_detail(cur, offer_id, h, fetch_ms, fetch_bytes, url=None):
     text = html_na_text(h)
     cur.execute("""
         INSERT INTO job.offer_content (offer_id, lang, is_original, html_full, text_full)
@@ -596,7 +739,7 @@ def uloz_detail(cur, offer_id, h, fetch_ms, fetch_bytes):
 
     # Co portal uvadza ako ciselnik, precitame hned — netreba na to model.
     try:
-        uloz_udaje(cur, offer_id, h)
+        uloz_udaje(cur, offer_id, h, url)
     except Exception as e:
         # Vytazenie udajov je bonus; ked zlyha, ulozeny detail ma zostat.
         print("    POZN. udaje sa nevytazili: %s" % str(e)[:80])
@@ -633,11 +776,19 @@ def zapis_priebeh(conn, run_id, najdene, novych, detailov, chyb):
 def zbieraj_portal(conn, zdroj, limit, bez_detailov, run_id=None):
     cur = conn.cursor()
     kod = zdroj["code"]
-    url = zdroj["url_kriteria"] or zdroj["base_url"]
     pauza = (zdroj["request_delay_ms"] or 1500) / 1000.0
 
+    # Portal moze mat viac vychodzich adries a zber ich prejde po kolach.
+    # profesia.sk nedava vsetky ponuky na jednom zozname — kazdy kraj ma
+    # vlastnu adresu, takze bez toho by sa zozbieral len jeden kraj.
+    adresy = [zdroj["url_kriteria"] or zdroj["base_url"]]
+    adresy += [a for a in (zdroj.get("url_kriteria_dalsie") or []) if a]
+    url = adresy[0]
+
     print("\n" + "=" * 66)
-    print("%s — %s" % (zdroj["name"], url))
+    print("%s — %s%s" % (zdroj["name"], url,
+                         ("  (+%d dalsich adries)" % (len(adresy) - 1))
+                         if len(adresy) > 1 else ""))
     if zdroj["popis"]:
         print("  " + zdroj["popis"][:150].replace("\n", " "))
     print("=" * 66)
@@ -649,19 +800,45 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov, run_id=None):
     session = requests.Session()
     najdene = novych = detailov = chyb = 0
 
-    try:
-        h, _, _ = stiahni(session, url)
-    except Exception as e:
-        print("  CHYBA pri stahovani vypisu: %s" % str(e)[:90])
+    jeLinkedIn = kod == "linkedin"
+
+    def rozober(html_text, adresa):
+        if jeLinkedIn:
+            return najdi_ponuky_linkedin(html_text)
+        if kod == "profesia":
+            return najdi_ponuky_profesia(html_text, adresa)
+        return najdi_ponuky(html_text, adresa, zdroj["ponuk_na_stranu"])
+
+    ponuky = []
+    videne_url = set()
+    h = None
+    for i, adresa in enumerate(adresy):
+        if i:
+            time.sleep(pauza)
+        try:
+            ha, _, _ = stiahni(session, adresa)
+        except Exception as e:
+            chyb += 1
+            print("  CHYBA pri stahovani vypisu %s: %s" % (adresa[-40:], str(e)[:70]))
+            continue
+        if h is None:
+            h = ha                       # prve HTML sa pouzije na strankovanie
+
+        nove = [p for p in rozober(ha, adresa) if p[0] not in videne_url]
+        videne_url.update(p[0] for p in nove)
+        ponuky.extend(nove)
+        if len(adresy) > 1:
+            print("  %s: %d ponuk" % (adresa.rstrip("/").split("/")[-1], len(nove)))
+
+    # Ani jedna adresa sa nestiahla — beh nema z coho pokracovat.
+    if h is None:
         cur.execute("""UPDATE job.scrape_runs SET status='failed', finished_at=NOW(),
-                       error_message=%s WHERE id=%s""", (str(e)[:500], run_id))
+                       error_message=%s WHERE id=%s""",
+                    ("Nepodarilo sa stiahnut ziadny vypis", run_id))
         conn.commit()
         cur.close()
         return 0, 0
 
-    jeLinkedIn = kod == "linkedin"
-    ponuky = (najdi_ponuky_linkedin(h) if jeLinkedIn
-              else najdi_ponuky(h, url, zdroj["ponuk_na_stranu"]))
     print("  Na vypise najdenych odkazov na ponuky: %d" % len(ponuky))
 
     # --- strankovanie ---
@@ -670,7 +847,7 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov, run_id=None):
     # LinkedIn strankuje parametrom start po 10 — ma vlastny cyklus, lebo
     # bezne tvary (page=, strana=) tu nefunguju.
     if jeLinkedIn and len(ponuky) < limit:
-        videne = {u for u, _ in ponuky}
+        videne = set(videne_url)
         for start in range(10, 400, 10):
             if len(ponuky) >= limit:
                 break
@@ -681,7 +858,7 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov, run_id=None):
                 nove = [p for p in najdi_ponuky_linkedin(h2) if p[0] not in videne]
                 if not nove:
                     break
-                videne.update(u for u, _ in nove)
+                videne.update(p[0] for p in nove)
                 ponuky.extend(nove)
             except Exception:
                 break
@@ -698,8 +875,9 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov, run_id=None):
                 try:
                     time.sleep(pauza)
                     h2, _, _ = stiahni(session, dalsia)
-                    nove = [p for p in najdi_ponuky(h2, url) if p[0] not in {x[0] for x in ponuky}]
+                    nove = [p for p in rozober(h2, url) if p[0] not in videne_url]
                     if nove:
+                        videne_url.update(p[0] for p in nove)
                         ponuky.extend(nove)
                         print("    strana %d (%s): +%d" % (strana, vzor % strana, len(nove)))
                         break
@@ -748,7 +926,7 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov, run_id=None):
             time.sleep(pauza)
             try:
                 h2, ms, bajtov = stiahni(session, u)
-                znakov = uloz_detail(cur, offer_id, h2, ms, bajtov)
+                znakov = uloz_detail(cur, offer_id, h2, ms, bajtov, u)
                 detailov += 1
                 conn.commit()
                 if detailov % 10 == 0 or detailov == len(na_detail):
@@ -783,7 +961,7 @@ def doplnit_udaje(conn, kod_portalu=None):
     zbytocne zatazil. Prazdne stlpce sa tak daju doplnit aj spatne.
     """
     cur = conn.cursor()
-    sql = """SELECT o.id, c.html_full
+    sql = """SELECT o.id, c.html_full, o.url
                FROM job.offers o
                JOIN job.offer_content c ON c.offer_id = o.id AND c.is_original
               WHERE c.html_full IS NOT NULL"""
@@ -798,9 +976,9 @@ def doplnit_udaje(conn, kod_portalu=None):
     print("Inzeratov s ulozenym HTML: %d" % len(riadky))
 
     doplnenych = bez_udajov = chyb = 0
-    for offer_id, h in riadky:
+    for offer_id, h, url in riadky:
         try:
-            if uloz_udaje(cur, offer_id, h):
+            if uloz_udaje(cur, offer_id, h, url):
                 doplnenych += 1
             else:
                 bez_udajov += 1
@@ -853,7 +1031,8 @@ def main():
 
     # LinkedIn a spol. sa preskakuju — vyzaduju prihlasenie a obsah dotahuju
     # javascriptom, takze beznym stahovanim HTML sa nezbieraju.
-    sql = """SELECT id, code, name, base_url, url_kriteria, popis, ponuk_na_stranu,
+    sql = """SELECT id, code, name, base_url, url_kriteria, url_kriteria_dalsie,
+                    popis, ponuk_na_stranu,
                     request_delay_ms, default_period_days
                FROM job.sources
               WHERE is_active AND NOT vyzaduje_prihlasenie"""
