@@ -350,7 +350,7 @@ def najdi_ponuky(html_text, base, ponuk_na_stranu=None):
     vyskytu — portaly zvyknu mat najnovsie ponuky hore.
     """
     najdene = []
-    videne = set()
+    videne = {}          # url -> index v najdene, aby sa dal nazov doplnit
 
     for href, text in RE_ODKAZ.findall(html_text):
         url = urljoin(base, html.unescape(href.strip()))
@@ -363,17 +363,36 @@ def najdi_ponuky(html_text, base, ponuk_na_stranu=None):
             continue
 
         url = url.split("?")[0].rstrip("/")
-        if url in videne:
+
+        # Odkaz spat na samotny vypis ("Pracovne ponuky" v zahlavi) vyzera
+        # ako detail, lebo adresa obsahuje to iste klucove slovo. Inzerat to
+        # nie je a jeho "detail" je cely zoznam.
+        if url == base.split("?")[0].rstrip("/"):
             continue
-        videne.add(url)
 
         # Priznak uzavretia sa hlada v CELEJ karte — "OBSADENE" byva
         # pripisane za nazvom aj mimo neho.
         popis = ocisti_text(text)
         nazov = nazov_z_karty(text) or popis
+
+        # Na jeden inzerat vedie z karty zvycajne VIAC odkazov: obrazok,
+        # nadpis, tlacidlo. Obrazkovy odkaz nema ziadny text (nazov ma len
+        # v aria-label), takze pri lugera.sk zostal nazov prazdny a ulozilo
+        # sa cislo z adresy. Drzi sa preto prvy odkaz, ktory nazov NAOZAJ
+        # nesie — poradie odkazov je vec sablony portalu.
+        if url in videne:
+            i = videne[url]
+            if not najdene[i][1] and nazov:
+                najdene[i] = (url, nazov[:300], najdene[i][2] or bool(RE_UZAVRETE.search(popis)))
+            elif RE_UZAVRETE.search(popis):
+                najdene[i] = (najdene[i][0], najdene[i][1], True)
+            continue
+
+        videne[url] = len(najdene)
         najdene.append((url, nazov[:300], bool(RE_UZAVRETE.search(popis))))
 
-    return najdene
+    # Ked nazov nenesie ziadny z odkazov, zostane aspon identifikator z adresy.
+    return [(u, n or external_id_z_url(u), z) for u, n, z in najdene]
 
 
 def external_id_z_url(url):
@@ -496,21 +515,34 @@ RE_INFO_DVOJICA = re.compile(
     re.I | re.S)
 
 
+# lugera.sk: <span class="hs-meta-widget-title">Lokalita</span>
+#            <span class="hs-meta-widget-data">Bratislavsky kraj</span>
+# Hodnota byva zabalena este v odkaze na filter.
+RE_META_DVOJICA = re.compile(
+    r'<span[^>]*\bclass="[^"]*\bhs-meta-widget-title\b[^"]*"[^>]*>(.*?)</span>\s*'
+    r'<span[^>]*\bclass="[^"]*\bhs-meta-widget-data\b[^"]*"[^>]*>(.*?)</span>',
+    re.I | re.S)
+
+
 # Ako sa jednotlive polia volaju na roznych portaloch.
 POLIA = {
     "uvazok":   ("pracovny pomer", "pracovný pomer", "forma", "typ pracovneho pomeru",
-                 "druh pracovneho pomeru", "druh pracovného pomeru", "uvazok", "úväzok"),
+                 "druh pracovneho pomeru", "druh pracovného pomeru", "uvazok", "úväzok",
+                 "typ uvazku", "typ pracovneho vztahu", "stav"),
     "miesto":   ("miesto", "lokalita", "miesto vykonu prace", "miesto práce", "mesto",
                  "location"),
     "mzda":     ("odmena", "plat", "mzda", "ponukany plat", "ponúkaný plat", "salary",
                  "mzdove podmienky", "mzdové podmienky", "zakladna zlozka mzdy",
-                 "sadzba", "rate", "hodinova sadzba"),
+                 "sadzba", "rate", "hodinova sadzba", "cena", "ohodnotenie",
+                 "zakladny plat", "základný plat", "informacie o plate"),
     "homeoffice": ("home office", "homeoffice", "praca z domu", "práca z domu", "remote"),
     # titans.eu: "Full-time" / "Part-time" pod popiskou o forme spoluprace.
     "forma":    ("forma spoluprace", "forma spolupráce", "typ uvazku", "uvazok"),
     "nastup":   ("datum nastupu", "dátum nástupu", "nastup", "nástup", "termin nastupu"),
     "firma":    ("spolocnost", "spoločnosť", "firma", "zamestnavatel", "zamestnávateľ",
                  "klient"),
+    # lugera.sk drzi odbor ako samostatny udaj vedla lokality.
+    "odvetvie": ("odvetvie", "oblast", "oblasť", "kategoria", "kategória", "sektor"),
 }
 
 
@@ -535,6 +567,7 @@ def udaje_z_detailu(h):
     dvojice += [(p, hod) for _, p, _, hod in RE_POPIS_HODNOTA.findall(h)]
     dvojice += [(p, hod) for p, hod in RE_STRONG_SPAN.findall(h)]
     dvojice += [(p, hod) for p, hod in RE_INFO_DVOJICA.findall(h)]
+    dvojice += [(p, hod) for p, hod in RE_META_DVOJICA.findall(h)]
 
     najdene = {}
     for popis, hodnota in dvojice:
@@ -771,6 +804,7 @@ def uloz_udaje(cur, offer_id, h, url=None):
             salary_max       = COALESCE(salary_max, %s),
             salary_period    = COALESCE(salary_period, %s),
             salary_currency  = COALESCE(salary_currency, %s),
+            industry         = COALESCE(industry, %s),
             updated_at       = NOW()
          WHERE id = %s
     """, (
@@ -783,6 +817,8 @@ def uloz_udaje(cur, offer_id, h, url=None):
         smin, smax,
         obdobie if smin else None,
         "EUR" if smin else None,
+        # Odvetvie uvadza len cast portalov (lugera.sk); inde ho doplni model.
+        (u.get("odvetvie") or None) and u["odvetvie"][:100],
         offer_id,
     ))
     return True
