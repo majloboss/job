@@ -188,6 +188,69 @@ def najdi_ponuky_linkedin(html_text):
 RE_UZAVRETE = re.compile(r"obsaden|neprij[ií]mame|uzavret|zrusen", re.I)
 
 
+# Nazov pozicie v karte zoznamu. Portaly ho obalia do vlastneho prvku
+# (ariva.sk: class="job-title", inde h2/h3), zatial co zvysok karty su
+# dalsie stlpce — forma, lokalita, homeoffice, plat.
+#
+# Bez tohto sa do nazvu dostal cely text odkazu, teda napr.
+#   "IT Admin Forma: Kontrakt / TPP Lokalita: Bratislava Senec ... Plat: 2200 - 5800"
+# a v zozname sa nedalo precitat, o aku poziciu vlastne ide.
+RE_NAZOV_V_KARTE = re.compile(
+    r'<(h[1-4]|div|span|p)\b[^>]*class="[^"]*(?:job-title|offer-title|position-title'
+    r'|job__title|jobTitle|job_title)[^"]*"[^>]*>',
+    re.I)
+
+
+def ocisti_text(kus):
+    """HTML fragment na jednoriadkovy text."""
+    kus = re.sub(r"<[^>]+>", " ", kus)
+    return re.sub(r"\s+", " ", html.unescape(kus)).strip()
+
+
+# Emoji a podobna grafika v nazve — na ariva.sk oznacuje zvyhodnenu ponuku.
+RE_OZDOBY = re.compile(
+    "[\U0001F000-\U0001FAFF←-⇿⌀-➿️⬀-⯿]")
+
+# "Perl vyvojar - OBSADENE" -> "Perl vyvojar"; stav uz drzi closed_reason.
+RE_PRIPONA_UZAVRETE = re.compile(
+    r"\s*[-–—|(]?\s*(?:obsaden\w*|neprij[ií]mame\s+z[aá]ujemcov"
+    r"|uzavret\w*|zrusen\w*)\s*\)?\s*$", re.I)
+
+
+def nazov_z_karty(text_odkazu):
+    """
+    Nazov pozicie z karty. Ked karta nema rozpoznatelny prvok s nazvom,
+    vrati None a volajuci pouzije cely text odkazu.
+
+    Prvok sa uzavrie pocitanim vnorenia — nazov byva obaleny este v <b>
+    a <span>, takze prve <\/div> patri im, nie prvku s nazvom.
+    """
+    m = RE_NAZOV_V_KARTE.search(text_odkazu)
+    if not m:
+        return None
+
+    znacka = m.group(1).lower()
+    hlbka = 1
+    i = m.end()
+    vzor = re.compile(r"<(/?)" + znacka + r"\b[^>]*>", re.I)
+    while hlbka > 0:
+        d = vzor.search(text_odkazu, i)
+        if not d:
+            break                       # neuzavreta znacka — vezmi zvysok
+        hlbka += -1 if d.group(1) else 1
+        i = d.start() if hlbka == 0 else d.end()
+
+    nazov = ocisti_text(text_odkazu[m.end():i])
+
+    # Dekoracie portalu do nazvu nepatria: ohnik je len grafika zvyhodnenej
+    # ponuky a OBSADENE uz mame ako samostatny priznak.
+    nazov = RE_OZDOBY.sub("", nazov)
+    nazov = RE_PRIPONA_UZAVRETE.sub("", nazov).strip(" -–—·|,")
+
+    # Prilis kratky vysledok je skor popiska stlpca nez nazov pozicie.
+    return nazov if len(nazov) >= 3 else None
+
+
 def najdi_ponuky(html_text, base, ponuk_na_stranu=None):
     """
     Vytiahne zo stranky odkazy, ktore vyzeraju ako detail ponuky.
@@ -213,9 +276,11 @@ def najdi_ponuky(html_text, base, ponuk_na_stranu=None):
             continue
         videne.add(url)
 
-        popis = re.sub(r"<[^>]+>", " ", text)
-        popis = re.sub(r"\s+", " ", html.unescape(popis)).strip()
-        najdene.append((url, popis[:300], bool(RE_UZAVRETE.search(popis))))
+        # Priznak uzavretia sa hlada v CELEJ karte — "OBSADENE" byva
+        # pripisane za nazvom aj mimo neho.
+        popis = ocisti_text(text)
+        nazov = nazov_z_karty(text) or popis
+        najdene.append((url, nazov[:300], bool(RE_UZAVRETE.search(popis))))
 
     return najdene
 
@@ -256,7 +321,7 @@ def zaloz_beh(cur, source_id, dni, run_type="manual"):
 
 def uloz_ponuku(cur, source_id, run_id, url, nazov, uzavrete=False):
     """
-    Vracia (offer_id, je_novy).
+    Vracia (offer_id, je_novy, chyba_detail).
 
     Uzavreta ponuka sa uklada tiez — do historie patri a jej text sa moze
     hodit na porovnanie. Oznaci sa vsak is_active = FALSE s dovodom, aby
@@ -278,18 +343,18 @@ def uloz_ponuku(cur, source_id, run_id, url, nazov, uzavrete=False):
             closed_at     = EXCLUDED.closed_at,
             closed_reason = EXCLUDED.closed_reason,
             updated_at    = NOW()
-        RETURNING id, (xmax = 0) AS je_novy
+        RETURNING id, (xmax = 0) AS je_novy, detail_fetched_at IS NULL AS chyba_detail
     """, (source_id, ext, url[:500], (nazov or ext)[:300], run_id,
           not uzavrete,
           datetime.now() if uzavrete else None,
           "obsadene" if uzavrete else None))
-    offer_id, je_novy = cur.fetchone()
+    offer_id, je_novy, chyba_detail = cur.fetchone()
 
     cur.execute("""
         INSERT INTO job.scrape_run_offers (run_id, offer_id, action)
         VALUES (%s, %s, %s) ON CONFLICT DO NOTHING
     """, (run_id, offer_id, "new" if je_novy else "seen"))
-    return offer_id, je_novy
+    return offer_id, je_novy, chyba_detail
 
 
 def uloz_detail(cur, offer_id, h, fetch_ms, fetch_bytes):
@@ -394,17 +459,23 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov, run_id=None):
     print("  Spracujem: %d ponuk" % len(ponuky))
 
     # --- ulozenie ponuk ---
-    nove_ids = []
+    # Na stiahnutie detailu sa caka kazda ponuka, ktora ho este NEMA — nielen
+    # tie prave vlozene. Predtym rozhodoval priznak "novy riadok", takze ked
+    # zber v prvom behu spadol alebo bezal s --bez-detailov, ponuka uz navzdy
+    # zostala len s nazvom zo zoznamu a detail sa nedotiahol nikdy.
+    na_detail = []
     uzavretych = 0
     for u, nazov, uzavrete in ponuky:
         if uzavrete:
             uzavretych += 1
         try:
-            offer_id, je_novy = uloz_ponuku(cur, zdroj["id"], run_id, u, nazov, uzavrete)
+            offer_id, je_novy, chyba_detail = uloz_ponuku(
+                cur, zdroj["id"], run_id, u, nazov, uzavrete)
             najdene += 1
             if je_novy:
                 novych += 1
-                nove_ids.append((offer_id, u))
+            if chyba_detail:
+                na_detail.append((offer_id, u))
         except Exception as e:
             chyb += 1
             conn.rollback()
@@ -414,18 +485,18 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov, run_id=None):
           % (najdene, novych,
              (", uzavretych: %d" % uzavretych) if uzavretych else ""))
 
-    # --- detaily len pre nove ---
-    if not bez_detailov and nove_ids:
-        print("  Detaily (%d):" % len(nove_ids))
-        for offer_id, u in nove_ids:
+    # --- detaily pre vsetky ponuky bez ulozeneho detailu ---
+    if not bez_detailov and na_detail:
+        print("  Detaily (%d):" % len(na_detail))
+        for offer_id, u in na_detail:
             time.sleep(pauza)
             try:
                 h2, ms, bajtov = stiahni(session, u)
                 znakov = uloz_detail(cur, offer_id, h2, ms, bajtov)
                 detailov += 1
                 conn.commit()
-                if detailov % 10 == 0 or detailov == len(nove_ids):
-                    print("    %d/%d hotovo" % (detailov, len(nove_ids)))
+                if detailov % 10 == 0 or detailov == len(na_detail):
+                    print("    %d/%d hotovo" % (detailov, len(na_detail)))
             except Exception as e:
                 chyb += 1
                 conn.rollback()
