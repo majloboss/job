@@ -870,6 +870,35 @@ def zapis_priebeh(conn, run_id, najdene, novych, detailov, chyb):
         conn.rollback()
 
 
+def preco_zlyhalo(chyba):
+    """
+    Zrozumitelny dovod do historie behov.
+
+    "Nepodarilo sa stiahnut ziadny vypis" nepovie, ci je portal mimo
+    prevadzky, zmenil adresu alebo nas blokuje — a podla toho sa lisi, co
+    s tym robit.
+    """
+    if chyba is None:
+        return "Nepodarilo sa stiahnut ziadny vypis"
+
+    text = str(chyba)
+    if "403" in text:
+        return ("Portal odmieta automaticky pristup (403). Byva za ochranou, "
+                "ktora vyzaduje JavaScript a cookies — beznym stahovanim HTML "
+                "sa obist neda.")
+    if "404" in text:
+        return "Vychodzia adresa uz neexistuje (404) — treba ju opravit v ciselniku."
+    if "429" in text:
+        return "Portal nas docasne obmedzil (429) — skus neskor alebo zvys odstup."
+    if "50" in text[:40] and "Server Error" in text:
+        return "Portal ma vypadok (chyba 5xx) — skus neskor."
+    if "Timeout" in text or "timed out" in text:
+        return "Portal neodpovedal vcas (timeout)."
+    if "NameResolution" in text or "getaddrinfo" in text:
+        return "Adresa portalu sa neda prelozit — skontroluj nazov domeny."
+    return "Nepodarilo sa stiahnut vypis: " + text[:200]
+
+
 # ============================================================
 # Zber jedneho portalu
 # ============================================================
@@ -914,6 +943,7 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov, run_id=None):
     ponuky = []
     videne_url = set()
     h = None
+    posledna_chyba = None
     for i, adresa in enumerate(adresy):
         if i:
             time.sleep(pauza)
@@ -921,6 +951,7 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov, run_id=None):
             ha, _, _ = stiahni(session, adresa)
         except Exception as e:
             chyb += 1
+            posledna_chyba = e
             print("  CHYBA pri stahovani vypisu %s: %s" % (adresa[-40:], str(e)[:70]))
             continue
         if h is None:
@@ -936,7 +967,7 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov, run_id=None):
     if h is None:
         cur.execute("""UPDATE job.scrape_runs SET status='failed', finished_at=NOW(),
                        error_message=%s WHERE id=%s""",
-                    ("Nepodarilo sa stiahnut ziadny vypis", run_id))
+                    (preco_zlyhalo(posledna_chyba), run_id))
         conn.commit()
         cur.close()
         return 0, 0
