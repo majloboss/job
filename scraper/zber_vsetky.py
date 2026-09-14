@@ -221,6 +221,46 @@ def najdi_ponuky_profesia(html_text, base):
     return najdene
 
 
+# titans.eu ma kazdy projekt ako <a class="it-project"> s nazvom v atribute
+# data-position_name a stavom v texte karty.
+#
+# Vseobecny parser tu bral ako inzeraty adresy typu /sk/java-developer-praca,
+# co su ROZCESTNIKY profesii, nie ponuky — detail takej stranky je cely zoznam
+# projektov, takze v DB skoncilo dvadsat kopii toho isteho vypisu.
+# Skutocny inzerat ma v adrese kod projektu: /sk/java-developer-260529DCZ.
+RE_TITANS_KARTA = re.compile(
+    r'<a\b[^>]*\bclass="[^"]*\bit-project\b[^"]*"[^>]*>', re.I)
+RE_TITANS_HREF = re.compile(r'\bhref="([^"]+)"', re.I)
+RE_TITANS_NAZOV = re.compile(r'\bdata-position_name="([^"]{2,200})"', re.I)
+
+
+def najdi_ponuky_titans(html_text, base):
+    """Projekty zo zoznamu titans.eu. Vracia rovnaky tvar ako najdi_ponuky()."""
+    najdene = []
+    videne = set()
+
+    for m in RE_TITANS_KARTA.finditer(html_text):
+        znacka = m.group(0)
+        mh = RE_TITANS_HREF.search(znacka)
+        if not mh:
+            continue
+        url = urljoin(base, html.unescape(mh.group(1))).split("?")[0].rstrip("/")
+        if url in videne:
+            continue
+        videne.add(url)
+
+        mn = RE_TITANS_NAZOV.search(znacka)
+        nazov = ocisti_text(mn.group(1)) if mn else external_id_z_url(url)
+
+        # Stav je v tele karty za znackou — "NEPRIJIMAME ZAUJEMCOV" alebo
+        # "USPESNE OBSADENE". Berie sa useknuty kus po dalsiu kartu.
+        koniec = html_text.find("</a>", m.end())
+        telo = html_text[m.end():koniec if koniec > 0 else m.end() + 4000]
+        najdene.append((url, nazov[:300], bool(RE_UZAVRETE.search(ocisti_text(telo)))))
+
+    return najdene
+
+
 # Ponuka, ktora uz nie je aktualna. Portaly to pisu do textu odkazu:
 #   ariva.sk   "Databazovy admin - OBSADENE"
 #   titans.eu  "NEPRIJIMAME ZAUJEMCOV"
@@ -448,14 +488,26 @@ RE_STRONG_SPAN = re.compile(
     re.I | re.S)
 
 
+# titans.eu: <span class="info-title">Lokalita</span><span class="info-text">...</span>
+# Popis aj hodnota su susedne prvky s vlastnou triedou.
+RE_INFO_DVOJICA = re.compile(
+    r'<span[^>]*\bclass="[^"]*\binfo-title\b[^"]*"[^>]*>(.*?)</span>\s*'
+    r'<span[^>]*\bclass="[^"]*\binfo-text\b[^"]*"[^>]*>(.*?)</span>',
+    re.I | re.S)
+
+
 # Ako sa jednotlive polia volaju na roznych portaloch.
 POLIA = {
     "uvazok":   ("pracovny pomer", "pracovný pomer", "forma", "typ pracovneho pomeru",
                  "druh pracovneho pomeru", "druh pracovného pomeru", "uvazok", "úväzok"),
-    "miesto":   ("miesto", "lokalita", "miesto vykonu prace", "miesto práce", "mesto"),
+    "miesto":   ("miesto", "lokalita", "miesto vykonu prace", "miesto práce", "mesto",
+                 "location"),
     "mzda":     ("odmena", "plat", "mzda", "ponukany plat", "ponúkaný plat", "salary",
-                 "mzdove podmienky", "mzdové podmienky", "zakladna zlozka mzdy"),
+                 "mzdove podmienky", "mzdové podmienky", "zakladna zlozka mzdy",
+                 "sadzba", "rate", "hodinova sadzba"),
     "homeoffice": ("home office", "homeoffice", "praca z domu", "práca z domu", "remote"),
+    # titans.eu: "Full-time" / "Part-time" pod popiskou o forme spoluprace.
+    "forma":    ("forma spoluprace", "forma spolupráce", "typ uvazku", "uvazok"),
     "nastup":   ("datum nastupu", "dátum nástupu", "nastup", "nástup", "termin nastupu"),
     "firma":    ("spolocnost", "spoločnosť", "firma", "zamestnavatel", "zamestnávateľ",
                  "klient"),
@@ -482,6 +534,7 @@ def udaje_z_detailu(h):
     dvojice = [(p, hod) for p, hod in RE_ARIVA_POLE.findall(h)]
     dvojice += [(p, hod) for _, p, _, hod in RE_POPIS_HODNOTA.findall(h)]
     dvojice += [(p, hod) for p, hod in RE_STRONG_SPAN.findall(h)]
+    dvojice += [(p, hod) for p, hod in RE_INFO_DVOJICA.findall(h)]
 
     najdene = {}
     for popis, hodnota in dvojice:
@@ -508,7 +561,7 @@ def udaje_z_detailu(h):
 # ("Kontrakt / TPP"), preto sa vracia zoznam.
 DRUHY_UVAZKU = [
     ("tpp",      (u"tpp", u"trvaly pracovny pomer", u"hlavny pracovny pomer",
-                  u"plny uvazok", u"full-time", u"full time")),
+                  u"plny uvazok", u"full-time", u"full time", u"fulltime")),
     ("zivnost",  (u"zivnost", u"kontrakt", u"contract", u"b2b", u"ico", u"freelance")),
     ("dohoda",   (u"dohoda", u"dohodu", u"dohodar")),
     ("brigada",  (u"brigada", u"brigadnik")),
@@ -544,8 +597,13 @@ def rezim_z_homeoffice(text):
 
 
 # "2200 - 5800 eur/mes na kontrakt" — rozsah, jedno cislo aj "od/do".
+#
+# Medzi cislami byva aj mena: titans.eu pise "3 200 € - 4 000 € / mesiac",
+# takze sa pred oddelovacom pripusta znak meny — inak by sa rozsah
+# nerozpoznal a zapisala by sa len dolna hranica.
 RE_MZDA_ROZSAH = re.compile(
-    r"(\d[\d\s\u00a0]{2,})\s*(?:-|–|—|do|az|až)\s*(\d[\d\s\u00a0]{2,})")
+    r"(\d[\d\s\u00a0]{2,})\s*(?:€|EUR|eur|Kč|CZK)?\s*(?:-|–|—|do|az|až)\s*"
+    r"(\d[\d\s\u00a0]{2,})")
 RE_MZDA_JEDNO = re.compile(r"(\d[\d\s\u00a0]{2,})")
 
 
@@ -679,9 +737,15 @@ def uloz_udaje(cur, offer_id, h, url=None):
         return False
 
     uvazky = uvazky_z_textu(u.get("uvazok"))
+    if not uvazky:
+        uvazky = uvazky_z_textu(u.get("forma"))
     smin, smax, obdobie = mzda_z_textu(u.get("mzda"))
     miesta = miesta_z_textu(u.get("miesto"))
     rezim = rezim_z_homeoffice(u.get("homeoffice"))
+    # titans.eu pise mieru prace z domu do LOKALITY ("100% Remote", "50% Remote"),
+    # samostatne pole nema — rezim sa preto skusa odvodit aj z nej.
+    if rezim is None:
+        rezim = rezim_z_homeoffice(u.get("miesto"))
 
     # Texty sa orezavaju na dlzku stlpcov. profesia.sk pise k mzde este cely
     # odstavec ("+ bonusy a provizie, priemerny plat po zauceni je..."), takze
@@ -807,6 +871,8 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov, run_id=None):
             return najdi_ponuky_linkedin(html_text)
         if kod == "profesia":
             return najdi_ponuky_profesia(html_text, adresa)
+        if kod == "titans":
+            return najdi_ponuky_titans(html_text, adresa)
         return najdi_ponuky(html_text, adresa, zdroj["ponuk_na_stranu"])
 
     ponuky = []
