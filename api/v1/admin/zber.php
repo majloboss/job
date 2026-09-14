@@ -164,22 +164,29 @@ if ($akcia === 'spustit') {
 
         json_error(
             'Na serveri nie je dostupný Python. Zber spusti lokálne:  '
-            . 'python scraper/profesia.py --dni ' . $dni . ' --limit ' . $limit, 501);
+            . 'python scraper/zber_vsetky.py --portal ' . $zdroj['code']
+            . ' --limit ' . $limit, 501);
     }
 
     // Skript bezi NA POZADI: zber trva minuty a HTTP poziadavka by medzitym
     // vyprsala. Vystup ide do suboru, stav sa sleduje cez job.scrape_runs.
-    $skript = dirname(__DIR__, 3) . '/scraper/profesia.py';
+    //
+    // zber_vsetky.py, NIE profesia.py: ten druhy vie iba profesia.sk a vyber
+    // portalu ignoroval. Beh sa oznacil zvolenym portalom, ale stiahla sa
+    // Profesia — 14.9.2026 tak vyber Arivy priniesol desat inzeratov
+    // z profesia.sk.
+    $skript = dirname(__DIR__, 3) . '/scraper/zber_vsetky.py';
     if (!is_file($skript)) {
         $pdo->prepare("UPDATE job.scrape_runs SET status='failed', finished_at=NOW(),
                        error_message=? WHERE id=?")
-            ->execute(['Skript scraper/profesia.py na serveri chýba', $runId]);
-        json_error('Skript scraper/profesia.py na serveri chýba', 500);
+            ->execute(['Skript scraper/zber_vsetky.py na serveri chýba', $runId]);
+        json_error('Skript scraper/zber_vsetky.py na serveri chýba', 500);
     }
 
     $log = sys_get_temp_dir() . '/job_zber_' . $runId . '.log';
     $prikaz = [$python, $skript,
-               '--dni', (string)$dni, '--limit', (string)$limit,
+               '--portal', $zdroj['code'],
+               '--limit', (string)$limit,
                '--run-id', (string)$runId];
 
     // PYTHONPATH ukazuje na api/pylibs, kam sa kniznice instaluju.

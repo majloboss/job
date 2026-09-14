@@ -145,9 +145,14 @@ VZORY_DETAIL = re.compile(
 
 # Stranky, ktore vyzeraju ako ponuka, ale su to vypisy, filtre alebo
 # navigacia. Bez toho by sa stahovali desiatky stran s nicim.
+#
+# /zameranie/ a /kategoria/ su filtre podla technologie (Java, React...).
+# Na ariva.sk ich je 55 a vyzeraju ako ponuky — prvy zber z nich stiahol
+# rozcestniky namiesto inzeratov.
 VZORY_MIMO = re.compile(
     r"(/prihlasenie|/login|/registracia|/kontakt|/o-nas|/about|/gdpr|/cookies"
     r"|/podmienky|/blog|/clanok|/firmy|/spolocnost|/employers|/zamestnavatel"
+    r"|/zameranie/|/kategoria/|/tag/|/stitok/"
     r"|\?page|&page|/page/|/strana|/filter|/hladat|/search\?|/rss|\.pdf$|\.jpg$)", re.I)
 
 
@@ -171,16 +176,24 @@ def najdi_ponuky_linkedin(html_text):
         videne.add(u)
         t = tituly[i] if i < len(tituly) else ""
         t = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", t))).strip()
-        vysledok.append((u, t[:300]))
+        vysledok.append((u, t[:300], False))
     return vysledok
+
+
+# Ponuka, ktora uz nie je aktualna. Portaly to pisu do textu odkazu:
+#   ariva.sk   "Databazovy admin - OBSADENE"
+#   titans.eu  "NEPRIJIMAME ZAUJEMCOV"
+# Taka ponuka sa zbiera tiez — do historie patri — ale oznaci sa ako
+# uzavreta, aby nestrasila vo vypise aktualnych.
+RE_UZAVRETE = re.compile(r"obsaden|neprij[ií]mame|uzavret|zrusen", re.I)
 
 
 def najdi_ponuky(html_text, base, ponuk_na_stranu=None):
     """
     Vytiahne zo stranky odkazy, ktore vyzeraju ako detail ponuky.
 
-    Vracia zoznam (url, text_odkazu) bez duplicit, v poradi vyskytu —
-    portaly zvyknu mat najnovsie ponuky hore.
+    Vracia zoznam (url, text_odkazu, uzavrete) bez duplicit, v poradi
+    vyskytu — portaly zvyknu mat najnovsie ponuky hore.
     """
     najdene = []
     videne = set()
@@ -202,7 +215,7 @@ def najdi_ponuky(html_text, base, ponuk_na_stranu=None):
 
         popis = re.sub(r"<[^>]+>", " ", text)
         popis = re.sub(r"\s+", " ", html.unescape(popis)).strip()
-        najdene.append((url, popis[:300]))
+        najdene.append((url, popis[:300], bool(RE_UZAVRETE.search(popis))))
 
     return najdene
 
@@ -241,17 +254,35 @@ def zaloz_beh(cur, source_id, dni, run_type="manual"):
     return cur.fetchone()[0]
 
 
-def uloz_ponuku(cur, source_id, run_id, url, nazov):
-    """Vracia (offer_id, je_novy)."""
+def uloz_ponuku(cur, source_id, run_id, url, nazov, uzavrete=False):
+    """
+    Vracia (offer_id, je_novy).
+
+    Uzavreta ponuka sa uklada tiez — do historie patri a jej text sa moze
+    hodit na porovnanie. Oznaci sa vsak is_active = FALSE s dovodom, aby
+    nestrasila vo vypise aktualnych ponuk.
+
+    Pri opakovanom zbere sa priznak PREPISUJE oboma smermi: ponuka moze byt
+    znovu otvorena a naopak.
+    """
     ext = external_id_z_url(url)
     cur.execute("""
         INSERT INTO job.offers
-            (source_id, external_id, url, title, last_seen_at, first_run_id)
-        VALUES (%s, %s, %s, %s, NOW(), %s)
+            (source_id, external_id, url, title, last_seen_at, first_run_id,
+             is_active, closed_at, closed_reason)
+        VALUES (%s, %s, %s, %s, NOW(), %s, %s, %s, %s)
         ON CONFLICT (source_id, external_id) DO UPDATE SET
-            last_seen_at = NOW(), missing_runs = 0, is_active = TRUE, updated_at = NOW()
+            last_seen_at  = NOW(),
+            missing_runs  = 0,
+            is_active     = EXCLUDED.is_active,
+            closed_at     = EXCLUDED.closed_at,
+            closed_reason = EXCLUDED.closed_reason,
+            updated_at    = NOW()
         RETURNING id, (xmax = 0) AS je_novy
-    """, (source_id, ext, url[:500], (nazov or ext)[:300], run_id))
+    """, (source_id, ext, url[:500], (nazov or ext)[:300], run_id,
+          not uzavrete,
+          datetime.now() if uzavrete else None,
+          "obsadene" if uzavrete else None))
     offer_id, je_novy = cur.fetchone()
 
     cur.execute("""
@@ -279,7 +310,7 @@ def uloz_detail(cur, offer_id, h, fetch_ms, fetch_bytes):
 # ============================================================
 # Zber jedneho portalu
 # ============================================================
-def zbieraj_portal(conn, zdroj, limit, bez_detailov):
+def zbieraj_portal(conn, zdroj, limit, bez_detailov, run_id=None):
     cur = conn.cursor()
     kod = zdroj["code"]
     url = zdroj["url_kriteria"] or zdroj["base_url"]
@@ -291,7 +322,8 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov):
         print("  " + zdroj["popis"][:150].replace("\n", " "))
     print("=" * 66)
 
-    run_id = zaloz_beh(cur, zdroj["id"], zdroj["default_period_days"] or 2)
+    if run_id is None:
+        run_id = zaloz_beh(cur, zdroj["id"], zdroj["default_period_days"] or 2)
     conn.commit()
 
     session = requests.Session()
@@ -356,14 +388,19 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov):
             else:
                 break      # ziadny tvar adresy nezabral — strankovanie koncime
 
-    ponuky = ponuky[:limit]
+    # limit 0 znamena "bez obmedzenia" — ponuky[:0] by vratilo prazdny zoznam.
+    if limit:
+        ponuky = ponuky[:limit]
     print("  Spracujem: %d ponuk" % len(ponuky))
 
     # --- ulozenie ponuk ---
     nove_ids = []
-    for u, nazov in ponuky:
+    uzavretych = 0
+    for u, nazov, uzavrete in ponuky:
+        if uzavrete:
+            uzavretych += 1
         try:
-            offer_id, je_novy = uloz_ponuku(cur, zdroj["id"], run_id, u, nazov)
+            offer_id, je_novy = uloz_ponuku(cur, zdroj["id"], run_id, u, nazov, uzavrete)
             najdene += 1
             if je_novy:
                 novych += 1
@@ -373,7 +410,9 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov):
             conn.rollback()
             print("  CHYBA ulozenia %s: %s" % (u[-40:], str(e)[:60]))
     conn.commit()
-    print("  Ulozenych: %d, z toho novych: %d" % (najdene, novych))
+    print("  Ulozenych: %d, z toho novych: %d%s"
+          % (najdene, novych,
+             (", uzavretych: %d" % uzavretych) if uzavretych else ""))
 
     # --- detaily len pre nove ---
     if not bez_detailov and nove_ids:
@@ -413,6 +452,10 @@ def main():
     ap.add_argument("--limit", type=int, default=50, help="max. ponuk na portal")
     ap.add_argument("--portal", help="iba jeden portal (kod z job.sources)")
     ap.add_argument("--bez-detailov", action="store_true")
+    # Ked zber spusta obrazovka, beh uz v DB existuje a skript ho ma prevziat.
+    # Inak by vznikli dva zaznamy: jeden prazdny z obrazovky a jeden skutocny.
+    ap.add_argument("--run-id", type=int, default=None,
+                    help="ID uz zalozeneho behu (ked spusta API)")
     args = ap.parse_args()
 
     conn = pripoj_db()
@@ -439,13 +482,17 @@ def main():
     if not zdroje:
         sys.exit("Ziadny portal na zber (skontroluj --portal a is_active)")
 
-    print("Portalov na zber: %d, limit %d ponuk na portal" % (len(zdroje), args.limit))
+    print("Portalov na zber: %d, limit %s na portal"
+          % (len(zdroje), args.limit if args.limit else "bez obmedzenia"))
     zaciatok = time.time()
     spolu_novych = spolu_detailov = 0
 
     for z in zdroje:
         try:
-            n, d = zbieraj_portal(conn, z, args.limit, args.bez_detailov)
+            # --run-id plati len pre prvy portal; pri viacerych by sa
+            # vysledky zlievali do jedneho behu.
+            n, d = zbieraj_portal(conn, z, args.limit, args.bez_detailov,
+                                  args.run_id if len(zdroje) == 1 else None)
             spolu_novych += n
             spolu_detailov += d
         except Exception as e:
