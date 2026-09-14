@@ -5,8 +5,8 @@ import './TestModelov.css';
 // Test modelov — porovnanie, ktorý model najlepšie zvládne dve úlohy
 // nad tým istým inzerátom:
 //
-//   1. Ťaženie údajov — názov, firma, mzda, miesto, HTML, preklad, súhrn
-//   2. Vhodnosť — skóre a slovné hodnotenie podľa CV a preferencií
+//   1. Zber — názov, firma, mzda, miesto, HTML, preklad, súhrn
+//   2. Vyhodnotenie — skóre a slovné hodnotenie podľa CV a preferencií
 //
 // Model dobrý na jedno nemusí byť dobrý na druhé — preto sa testujú obe
 // naraz a nad tým istým vstupom.
@@ -14,9 +14,11 @@ import './TestModelov.css';
 // Test beží NA SERVERI. Výsledky pribúdajú priebežne, takže sa dá odísť
 // z obrazovky aj zavrieť prehliadač a po návrate sa pokračuje tam, kde to je.
 
+// Kódy úloh ostávajú 'parse' a 'vhodnost' — sú v DB a v promptoch.
+// Mení sa len to, ako sa volajú na obrazovke.
 const ULOHY = {
-  parse:    { text: 'Ťaženie údajov', popis: 'Čo model vytiahol z inzerátu' },
-  vhodnost: { text: 'Vhodnosť',       popis: 'Ako posúdil vhodnosť pre teba' },
+  parse:    { text: 'Zber',         popis: 'Čo model vytiahol z inzerátu' },
+  vhodnost: { text: 'Vyhodnotenie', popis: 'Ako posúdil vhodnosť pre teba' },
 };
 
 export default function TestModelov() {
@@ -42,6 +44,11 @@ export default function TestModelov() {
   // Radenie klikom na hlavičku. Predvolene podľa ceny — modely idú v teste
   // od najlacnejších a v tom poradí sa aj porovnávajú.
   const [radenie, setRadenie] = useState({ stlpec: 'cena_1m', smer: 'asc' });
+
+  // Filter na ručné značky — po prejdení výsledkov si nimi zúžiš zoznam
+  // na modely, ktoré si označil za použiteľné.
+  const [lenZber, setLenZber] = useState(false);
+  const [lenVyhod, setLenVyhod] = useState(false);
 
   const casovacRef = useRef(null);
 
@@ -98,6 +105,41 @@ export default function TestModelov() {
     finally { setPracuje(false); }
   }
 
+  // Značka sa ukladá hneď po kliknutí a zároveň sa premietne do načítaných
+  // dát — bez toho by políčko po kliku odskočilo späť, kým nedobehne server.
+  async function oznac(vysledokId, pole, hodnota) {
+    setDetail(d => ({
+      ...d,
+      vysledky: d.vysledky.map(v =>
+        v.id === vysledokId ? { ...v, [pole]: hodnota } : v),
+    }));
+    try {
+      await api('/v1/admin/test-modelov?akcia=vhodnost', {
+        method: 'POST',
+        body: { vysledok_id: vysledokId, pole, hodnota },
+      });
+    } catch (e) {
+      setChyba(e.message);
+      await nacitatDetail(behId);      // vrátiť na stav zo servera
+    }
+  }
+
+  // Cieľ celého testu: nájsť model s najlepšími výsledkami a dostať ho do
+  // prevádzky. Zaradí sa celé poradie naraz — bezplatné prvé, platený ako
+  // poistka pre chvíľu, keď bezplatné vyčerpajú denný limit.
+  async function zaradit() {
+    const ucel = ulohaTab === 'parse' ? 'parse' : 'eval';
+    setPracuje(true);
+    setChyba(null);
+    try {
+      const r = await api('/v1/admin/test-modelov?akcia=zaradit', {
+        method: 'POST', body: { beh_id: behId, ucel },
+      });
+      setSprava(r.sprava);
+    } catch (e) { setChyba(e.message); }
+    finally { setPracuje(false); }
+  }
+
   async function zrusit(id) {
     setPracuje(true);
     try {
@@ -111,7 +153,9 @@ export default function TestModelov() {
 
   const beh = detail?.beh;
   let vysledky = (detail?.vysledky ?? [])
-    .filter(v => v.uloha === ulohaTab && Number(v.inzerat) === inzeratTab);
+    .filter(v => v.uloha === ulohaTab && Number(v.inzerat) === inzeratTab)
+    .filter(v => !lenZber || v.vhodnost_zber)
+    .filter(v => !lenVyhod || v.vhodnost_vyhodnotenie);
 
   if (radenie.stlpec) {
     const zn = radenie.smer === 'asc' ? 1 : -1;
@@ -129,6 +173,14 @@ export default function TestModelov() {
                          : String(x).localeCompare(String(y), 'sk'));
     });
   }
+
+  // Koľko modelov je označených pre práve zobrazenú úlohu. Ten istý model
+  // pri oboch inzerátoch sa ráta raz — do poradia ide tiež raz.
+  const znackaPole = ulohaTab === 'parse' ? 'vhodnost_zber' : 'vhodnost_vyhodnotenie';
+  const oznacenych = new Set(
+    (detail?.vysledky ?? [])
+      .filter(v => v.uloha === ulohaTab && v[znackaPole] && v.model_db_id)
+      .map(v => v.model_db_id)).size;
 
   function klikStlpec(kod) {
     setRadenie(r => r.stlpec === kod
@@ -346,6 +398,27 @@ export default function TestModelov() {
               Rozbaliť všetky
             </button>
 
+            {/* Filter na ručné značky — po prejdení výsledkov si ním zúžiš
+                zoznam na modely, ktoré si označil za použiteľné. */}
+            <label className="tm-filter">
+              <input type="checkbox" checked={lenZber}
+                     onChange={e => setLenZber(e.target.checked)} />
+              len vhodné na Zber
+            </label>
+            <label className="tm-filter">
+              <input type="checkbox" checked={lenVyhod}
+                     onChange={e => setLenVyhod(e.target.checked)} />
+              len vhodné na Vyhodnotenie
+            </label>
+
+            {/* Prenesie označené modely do poradia, ktoré aplikácia reálne
+                používa — to je cieľ testu. */}
+            {oznacenych > 0 && (
+              <button className="tm-zaradit" onClick={zaradit} disabled={pracuje}>
+                Zaradiť do poradia ({oznacenych})
+              </button>
+            )}
+
           </div>
 
           {vysledky.length === 0 ? (
@@ -369,6 +442,8 @@ export default function TestModelov() {
                       <Hl kod="total_tokens" text="Tok." cislo />
                       <Hl kod="trvanie_ms" text="Čas" cislo />
                       <Hl kod="cena_usd" text="Cena" cislo />
+                      <Hl kod="vhodnost_zber" text="Zber" cislo />
+                      <Hl kod="vhodnost_vyhodnotenie" text="Vyhod." cislo />
                     </tr>
                   ) : (
                     <tr>
@@ -380,12 +455,14 @@ export default function TestModelov() {
                       <Hl kod="total_tokens" text="Tok." cislo />
                       <Hl kod="trvanie_ms" text="Čas" cislo />
                       <Hl kod="cena_usd" text="Cena" cislo />
+                      <Hl kod="vhodnost_zber" text="Zber" cislo />
+                      <Hl kod="vhodnost_vyhodnotenie" text="Vyhod." cislo />
                     </tr>
                   )}
                 </thead>
                 <tbody>
                   {vysledky.map(v => (
-                    <Riadok key={v.id} v={v} uloha={ulohaTab}
+                    <Riadok key={v.id} v={v} uloha={ulohaTab} oznac={oznac}
                             otvoreny={otvorene.has(v.id)}
                             prepni={() => setOtvorene(p => {
                               const n = new Set(p);
@@ -422,9 +499,9 @@ function Odkaz({ cislo, nazov, url }) {
 // ------------------------------------------------------------
 // Jeden riadok výsledku + rozkliknutý detail
 // ------------------------------------------------------------
-function Riadok({ v, uloha, otvoreny, prepni }) {
+function Riadok({ v, uloha, otvoreny, prepni, oznac }) {
   const zlyhal = v.status !== 'ok';
-  const stlpcov = uloha === 'parse' ? 11 : 8;
+  const stlpcov = (uloha === 'parse' ? 11 : 8) + 2;   // + dve značky
 
   return (
     <>
@@ -474,6 +551,21 @@ function Riadok({ v, uloha, otvoreny, prepni }) {
         <td className="cislo">
           {Number(v.cena_usd) > 0 ? '$' + Number(v.cena_usd).toFixed(6)
                                   : <span className="tm-zadarmo">0</span>}
+        </td>
+
+        {/* Ručné značky. stopPropagation, aby klik na políčko neotváral
+            zároveň detail riadka. */}
+        <td className="cislo tm-znacka">
+          <input type="checkbox" checked={!!v.vhodnost_zber}
+                 onClick={e => e.stopPropagation()}
+                 onChange={e => oznac(v.id, 'vhodnost_zber', e.target.checked)}
+                 title="Model je vhodný na zber údajov" />
+        </td>
+        <td className="cislo tm-znacka">
+          <input type="checkbox" checked={!!v.vhodnost_vyhodnotenie}
+                 onClick={e => e.stopPropagation()}
+                 onChange={e => oznac(v.id, 'vhodnost_vyhodnotenie', e.target.checked)}
+                 title="Model je vhodný na vyhodnotenie" />
         </td>
       </tr>
 

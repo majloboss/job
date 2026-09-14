@@ -419,3 +419,31 @@
 
 .tm-skore-velke { font-size: 15px; margin: 0 0 10px; }
 .tm-skore-velke .tm-skore { font-size: 18px; padding: 3px 12px; }
+
+/* --- ručné značky a filter --- */
+.tm-znacka { padding: 4px 10px !important; }
+.tm-znacka input { width: 17px; height: 17px; cursor: pointer; }
+
+.tm-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+/* Zaradenie do poradia je cieľ testu — preto výrazné, nie tlmené. */
+.tm-zaradit {
+  min-height: 34px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--ok);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tm-zaradit:disabled { opacity: .45; cursor: default; }

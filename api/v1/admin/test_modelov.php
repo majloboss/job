@@ -6,6 +6,8 @@
 // POST ?akcia=spustit    zalozi a spusti test { url1, url2, max_modelov,
 //                                              cenovy_strop_1m, rozpocet_usd }
 // POST ?akcia=zrusit     zastavi beziaci test { beh_id }
+// POST ?akcia=vhodnost   oznaci model ako vhodny { vysledok_id, pole, hodnota }
+// POST ?akcia=zaradit    zaradi oznacene modely do poradia { beh_id, ucel }
 //
 // Test bezi NA POZADI cez proc_open, takze pokracuje aj po zavreti
 // prehliadaca. Vysledky pribudaju priebezne — obrazovka ich len cita.
@@ -67,6 +69,8 @@ if ($method === 'GET') {
 
     foreach ($vysledky as &$v) {
         $v['je_free'] = ai_je_true($v['je_free']);
+        $v['vhodnost_zber']         = ai_je_true($v['vhodnost_zber']);
+        $v['vhodnost_vyhodnotenie'] = ai_je_true($v['vhodnost_vyhodnotenie']);
         $v['uvazky']  = test_pg_pole($v['uvazky']);
         $v['ma_html'] = ($v['html_sk'] ?? '') !== '' || ($v['html_original'] ?? '') !== '';
 
@@ -102,6 +106,102 @@ if ($akcia === 'zrusit') {
     if (!$st->rowCount()) json_error('Beh nebeží alebo neexistuje', 404);
 
     json_ok(['sprava' => 'Test #' . $behId . ' sa zastaví pri najbližšom volaní']);
+}
+
+// ------------------------------------------------------------
+// POST ?akcia=vhodnost — rucna znacka, ze model je na danu ulohu vhodny
+//
+// Nazov stlpca sa do SQL vklada priamo (nedaju sa nan naviazat parametre),
+// preto sa berie z bieleho zoznamu.
+// ------------------------------------------------------------
+if ($akcia === 'vhodnost') {
+    $id   = (int)($vstup['vysledok_id'] ?? 0);
+    $pole = $vstup['pole'] ?? '';
+    if (!$id) json_error('Chýba vysledok_id', 400);
+    if (!in_array($pole, ['vhodnost_zber', 'vhodnost_vyhodnotenie'], true)) {
+        json_error('Neznáme pole: ' . $pole, 400);
+    }
+
+    $st = $pdo->prepare("UPDATE job.test_vysledky SET $pole = ? WHERE id = ?");
+    $st->execute([!empty($vstup['hodnota']) ? 't' : 'f', $id]);
+    if (!$st->rowCount()) json_error('Výsledok sa nenašiel', 404);
+
+    json_ok(['ok' => true]);
+}
+
+// ------------------------------------------------------------
+// POST ?akcia=zaradit — oznacene modely do poradia, ktore pouziva aplikacia
+//
+// To je ciel celeho testu: najst model, ktory dava najlepsie vysledky,
+// a dostat ho do prevadzky. Poradie (job.ai_poradie) uz existuje — pri
+// zlyhani sa aplikacia sama prepne na dalsi v nom.
+//
+// Modely sa radia BEZPLATNE PRVE a v ramci nich od najrychlejsich: cielom
+// je jazdit zadarmo a plateny je az poistka. Ked je ten isty model oznaceny
+// pri oboch inzeratoch, zarata sa raz.
+// ------------------------------------------------------------
+if ($akcia === 'zaradit') {
+    $behId = (int)($vstup['beh_id'] ?? 0);
+    $ucel  = $vstup['ucel'] ?? '';
+    if (!$behId) json_error('Chýba beh_id', 400);
+    if (!in_array($ucel, ['parse', 'eval'], true)) json_error('Neznámy účel', 400);
+
+    // 'parse' na obrazovke = Zber, 'eval' = Vyhodnotenie.
+    $stlpec = $ucel === 'parse' ? 'vhodnost_zber' : 'vhodnost_vyhodnotenie';
+    $uloha  = $ucel === 'parse' ? 'parse' : 'vhodnost';
+
+    $st = $pdo->prepare(
+        "SELECT DISTINCT ON (v.model_db_id)
+                v.model_db_id, v.model_id, v.je_free, v.cena_1m, v.trvanie_ms
+           FROM job.test_vysledky v
+          WHERE v.beh_id = ? AND v.uloha = ? AND v.$stlpec
+            AND v.model_db_id IS NOT NULL AND v.status = 'ok'
+          ORDER BY v.model_db_id, v.trvanie_ms");
+    $st->execute([$behId, $uloha]);
+    $modely = $st->fetchAll();
+
+    if (!$modely) json_error('V tomto behu nie je označený žiadny model', 400);
+
+    // Bezplatne prve, potom podla rychlosti. Plateny je poistka na chvilu,
+    // ked bezplatne vycerpaju denny limit.
+    usort($modely, function ($a, $b) {
+        $fa = ai_je_true($a['je_free']) ? 0 : 1;
+        $fb = ai_je_true($b['je_free']) ? 0 : 1;
+        return $fa !== $fb ? $fa <=> $fb
+             : (int)$a['trvanie_ms'] <=> (int)$b['trvanie_ms'];
+    });
+
+    $pdo->beginTransaction();
+    try {
+        // Cele poradie sa prepisuje naraz — jednoduchsie a bezpecnejsie nez
+        // posuvat jednotlive riadky.
+        $pdo->prepare('DELETE FROM job.ai_poradie WHERE ucel = ? AND source_id IS NULL')
+            ->execute([$ucel]);
+
+        $ins = $pdo->prepare(
+            'INSERT INTO job.ai_poradie (ucel, source_id, poradie, model_id)
+             VALUES (?, NULL, ?, ?)');
+        $i = 0;
+        foreach ($modely as $m) $ins->execute([$ucel, ++$i, (int)$m['model_db_id']]);
+
+        // Nove poradie znamena zacat od prveho modelu.
+        $pdo->prepare(
+            "UPDATE job.ai_stav SET poradie_index = 1, fails_in_row = 0
+              WHERE ucel = ? AND den = CURRENT_DATE")->execute([$ucel]);
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+
+    json_ok([
+        'zaradenych' => $i,
+        'modely'     => array_map(fn($m) => $m['model_id'], $modely),
+        'sprava'     => sprintf('Do poradia (%s) zaradených %d modelov: %s',
+                        $ucel === 'parse' ? 'Zber' : 'Vyhodnotenie', $i,
+                        implode(', ', array_map(fn($m) => $m['model_id'], $modely))),
+    ]);
 }
 
 // ------------------------------------------------------------
