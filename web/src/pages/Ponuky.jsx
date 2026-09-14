@@ -46,13 +46,16 @@ const ZATVORENE = {
 const PRAZDNY = {
   q: '', source_id: '', industry: '', employment_type: '', remote_type: '',
   salary_min: '', dni: '', bez_agentur: false, aj_bez_mzdy: true,
-  // Uzavrete ponuky sa standardne nezobrazuju — prihlasit sa na ne neda.
+  // Neaktualne ponuky sa standardne nezobrazuju — prihlasit sa na ne neda.
   stav: 'otvorene',
 };
 
+// Pomenovanie sa drzi toho, co je na zdroji: ariva.sk pise pri inzerate
+// OBSADENE, takze aj filter hovori "obsadené". "Uzavreté" bol nas vlastny
+// pojem, ktory sa nikde na portali nevyskytuje.
 const STAVY = [
-  ['otvorene', 'Otvorené'],
-  ['uzavrete', 'Uzavreté'],
+  ['otvorene', 'Voľné'],
+  ['uzavrete', 'Obsadené'],
   ['vsetky',   'Všetky'],
 ];
 

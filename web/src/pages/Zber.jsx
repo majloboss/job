@@ -118,7 +118,7 @@ export default function Zber() {
               inzerátov v DB
               {stav.uzavretych > 0 && (
                 <em className="zb-podrobnost">
-                  {stav.aktivnych} aktívnych, {stav.uzavretych} uzavretých
+                  {stav.aktivnych} voľných, {stav.uzavretych} obsadených
                 </em>
               )}
             </span>
