@@ -28,6 +28,7 @@ Vyzaduje: pip install requests psycopg2-binary
 
 import argparse
 import hashlib
+import unicodedata
 import html
 import os
 import re
@@ -201,10 +202,20 @@ RE_NAZOV_V_KARTE = re.compile(
     re.I)
 
 
-def ocisti_text(kus):
-    """HTML fragment na jednoriadkovy text."""
+def ocisti_text(kus, zachovaj_medzery=False):
+    """
+    HTML fragment na jednoriadkovy text.
+
+    So zachovaj_medzery zostane viacnasobna medzera — niektore portaly nou
+    oddeluju polozky zoznamu (ariva.sk miesta vykonu prace) a po zluceni
+    by sa uz nedali rozlisit.
+    """
     kus = re.sub(r"<[^>]+>", " ", kus)
-    return re.sub(r"\s+", " ", html.unescape(kus)).strip()
+    kus = html.unescape(kus)
+    kus = kus.replace(u"\xa0", " ")
+    if zachovaj_medzery:
+        return re.sub(r"[ \t]{3,}", "  ", re.sub(r"[\r\n]+", "  ", kus)).strip()
+    return re.sub(r"\s+", " ", kus).strip()
 
 
 # Emoji a podobna grafika v nazve — na ariva.sk oznacuje zvyhodnenu ponuku.
@@ -329,13 +340,18 @@ def uloz_ponuku(cur, source_id, run_id, url, nazov, uzavrete=False):
 
     Pri opakovanom zbere sa priznak PREPISUJE oboma smermi: ponuka moze byt
     znovu otvorena a naopak.
+
+    Inzerat z agenturneho portalu (ariva.sk, titans.eu a pod.) sa oznaci
+    priznakom z ciselnika — tieto portaly zamestnavatela neuvadzaju, takze
+    stlpec firmy zostava prazdny a bez priznaku by to vyzeralo ako chyba.
     """
     ext = external_id_z_url(url)
     cur.execute("""
         INSERT INTO job.offers
             (source_id, external_id, url, title, last_seen_at, first_run_id,
-             is_active, closed_at, closed_reason)
-        VALUES (%s, %s, %s, %s, NOW(), %s, %s, %s, %s)
+             is_active, closed_at, closed_reason, is_agency_offer)
+        VALUES (%s, %s, %s, %s, NOW(), %s, %s, %s, %s,
+                (SELECT je_agentura FROM job.sources WHERE id = %s))
         ON CONFLICT (source_id, external_id) DO UPDATE SET
             last_seen_at  = NOW(),
             missing_runs  = 0,
@@ -347,7 +363,8 @@ def uloz_ponuku(cur, source_id, run_id, url, nazov, uzavrete=False):
     """, (source_id, ext, url[:500], (nazov or ext)[:300], run_id,
           not uzavrete,
           datetime.now() if uzavrete else None,
-          "obsadene" if uzavrete else None))
+          "obsadene" if uzavrete else None,
+          source_id))
     offer_id, je_novy, chyba_detail = cur.fetchone()
 
     cur.execute("""
@@ -355,6 +372,212 @@ def uloz_ponuku(cur, source_id, run_id, url, nazov, uzavrete=False):
         VALUES (%s, %s, %s) ON CONFLICT DO NOTHING
     """, (run_id, offer_id, "new" if je_novy else "seen"))
     return offer_id, je_novy, chyba_detail
+
+
+# ============================================================
+# Zakladne udaje z detailu ponuky
+#
+# Nazov, mzda, uvazok a spol. vie vytiazit aj model, ale ten bezi az
+# v druhom kroku, stoji peniaze a pri niektorych poliach sa myli. Ked ich
+# portal uvadza ako ciselnik vedla textu inzeratu, je spolahlivejsie
+# precitat ich priamo — model potom dopĺňa uz len to, co treba naozaj
+# odvodit z textu (suhrn, technologie, odvetvie).
+# ============================================================
+
+# ariva.sk: dvojica <li><b>Popis</b></li><li><span>hodnota</span></li>
+RE_ARIVA_POLE = re.compile(
+    r"<li[^>]*>(?:\s*<(?:img|i)\b[^>]*>)*\s*<b[^>]*>(.*?)</b>\s*</li>\s*"
+    r"<li[^>]*>(.*?)</li>",
+    re.I | re.S)
+
+# Vseobecny tvar: <dt>Popis</dt><dd>hodnota</dd> alebo th/td v tabulke.
+RE_POPIS_HODNOTA = re.compile(
+    r"<(dt|th)\b[^>]*>(.*?)</\1>\s*<(dd|td)\b[^>]*>(.*?)</\3>",
+    re.I | re.S)
+
+# Ako sa jednotlive polia volaju na roznych portaloch.
+POLIA = {
+    "uvazok":   ("pracovny pomer", "pracovný pomer", "forma", "typ pracovneho pomeru",
+                 "druh pracovneho pomeru", "uvazok", "úväzok"),
+    "miesto":   ("miesto", "lokalita", "miesto vykonu prace", "miesto práce", "mesto"),
+    "mzda":     ("odmena", "plat", "mzda", "ponukany plat", "ponúkaný plat", "salary"),
+    "homeoffice": ("home office", "homeoffice", "praca z domu", "práca z domu", "remote"),
+    "nastup":   ("datum nastupu", "dátum nástupu", "nastup", "nástup", "termin nastupu"),
+    "firma":    ("spolocnost", "spoločnosť", "firma", "zamestnavatel", "zamestnávateľ",
+                 "klient"),
+}
+
+
+def _kluc(popis):
+    """Popis pola na porovnatelny tvar: bez diakritiky, malymi, bez dvojbodky."""
+    popis = ocisti_text(popis).rstrip(":").strip().lower()
+    return unicodedata.normalize("NFKD", popis).encode("ascii", "ignore").decode()
+
+
+def udaje_z_detailu(h):
+    """
+    Dvojice popis/hodnota z detailu ponuky ako slovnik nasich klucov.
+    Neznama polozka sa zahodi — do DB patria len polia, ktore mame.
+    """
+    dvojice = [(p, hod) for p, hod in RE_ARIVA_POLE.findall(h)]
+    dvojice += [(p, hod) for _, p, _, hod in RE_POPIS_HODNOTA.findall(h)]
+
+    najdene = {}
+    for popis, hodnota in dvojice:
+        k = _kluc(popis)
+        # Miesta oddeluje ariva.sk NIEKOLKYMI medzerami. ocisti_text() ich
+        # zlucuje na jednu, takze "Bratislava   Senec" by splynulo do
+        # jedineho nazvu — deli sa preto este pred cistenim.
+        hodnota = ocisti_text(hodnota.replace("</li>", "  ").replace("<br>", "  ")
+                                     .replace("<br/>", "  ").replace("<br />", "  "),
+                              zachovaj_medzery=True)
+        if not hodnota:
+            continue
+        for nase, nazvy in POLIA.items():
+            if nase in najdene:
+                continue            # prve vyskyt vyhrava — byva v zahlavi
+            if any(k == unicodedata.normalize("NFKD", n).encode("ascii", "ignore").decode()
+                   for n in nazvy):
+                najdene[nase] = hodnota[:500]
+                break
+    return najdene
+
+
+# Uvazok z volneho textu. Portal ich uvadza aj viac naraz
+# ("Kontrakt / TPP"), preto sa vracia zoznam.
+DRUHY_UVAZKU = [
+    ("tpp",      (u"tpp", u"trvaly pracovny pomer", u"hlavny pracovny pomer",
+                  u"plny uvazok", u"full-time", u"full time")),
+    ("zivnost",  (u"zivnost", u"kontrakt", u"contract", u"b2b", u"ico", u"freelance")),
+    ("dohoda",   (u"dohoda", u"dohodu", u"dohodar")),
+    ("brigada",  (u"brigada", u"brigadnik")),
+    ("internship", (u"staz", u"internship", u"trainee", u"praktikant")),
+]
+
+
+def uvazky_z_textu(text):
+    if not text:
+        return []
+    t = unicodedata.normalize("NFKD", text.lower()).encode("ascii", "ignore").decode()
+    najdene = [kod for kod, slova in DRUHY_UVAZKU if any(w in t for w in slova)]
+    return najdene
+
+
+# "60%" -> hybrid, "100%" -> remote, chybajuce alebo 0 -> onsite.
+RE_PERCENTA = re.compile(r"(\d{1,3})\s*%")
+
+
+def rezim_z_homeoffice(text):
+    if not text:
+        return None
+    m = RE_PERCENTA.search(text)
+    if m:
+        p = int(m.group(1))
+        if p >= 100:
+            return "remote"
+        return "hybrid" if p > 0 else "onsite"
+    t = unicodedata.normalize("NFKD", text.lower()).encode("ascii", "ignore").decode()
+    if "remote" in t or "z domu" in t or "home office" in t:
+        return "remote"
+    return None
+
+
+# "2200 - 5800 eur/mes na kontrakt" — rozsah, jedno cislo aj "od/do".
+RE_MZDA_ROZSAH = re.compile(
+    r"(\d[\d\s\u00a0]{2,})\s*(?:-|–|—|do|az|až)\s*(\d[\d\s\u00a0]{2,})")
+RE_MZDA_JEDNO = re.compile(r"(\d[\d\s\u00a0]{2,})")
+
+
+def _cislo(s):
+    return int(re.sub(r"[^\d]", "", s))
+
+
+def mzda_z_textu(text):
+    """
+    Vracia (min, max, obdobie) alebo (None, None, None).
+
+    Hodnoty pod 100 sa ignoruju — byva to percento home office alebo
+    pocet dni, nie mzda.
+    """
+    if not text:
+        return (None, None, None)
+
+    t = unicodedata.normalize("NFKD", text.lower()).encode("ascii", "ignore").decode()
+    if "/hod" in t or "hodin" in t or "manday" in t or "/md" in t:
+        obdobie = "hour" if "hod" in t else "day"
+    elif "/rok" in t or "rocne" in t or "annum" in t:
+        obdobie = "year"
+    else:
+        obdobie = "month"
+
+    m = RE_MZDA_ROZSAH.search(text)
+    if m:
+        a, b = _cislo(m.group(1)), _cislo(m.group(2))
+        if a >= 100 and b >= a:
+            return (a, b, obdobie)
+
+    for m in RE_MZDA_JEDNO.finditer(text):
+        v = _cislo(m.group(1))
+        if v >= 100:
+            return (v, None, obdobie)
+    return (None, None, None)
+
+
+# Miesta su na ariva.sk zlepene medzerami: "Bratislava Senec Zilina".
+# Viacslovne nazvy ("Liptovsky Mikulas") sa tym rozbiju, preto sa delí
+# na dvoch a viac medzerach — tak ich portal oddeluje.
+def miesta_z_textu(text):
+    if not text:
+        return []
+    kusy = re.split(r"\s{2,}|\s*[,;/|]\s*|\s*\u2022\s*", text.strip())
+    return [k.strip() for k in kusy if len(k.strip()) >= 2][:10]
+
+
+def uloz_udaje(cur, offer_id, h):
+    """
+    Zapise do ponuky udaje vycitane z detailu.
+
+    Prepisuju sa len prazdne polia (COALESCE): ked uz nieco vyplnil model
+    alebo skorsi beh, necha sa to tak.
+    """
+    u = udaje_z_detailu(h)
+    if not u:
+        return False
+
+    uvazky = uvazky_z_textu(u.get("uvazok"))
+    smin, smax, obdobie = mzda_z_textu(u.get("mzda"))
+    miesta = miesta_z_textu(u.get("miesto"))
+    rezim = rezim_z_homeoffice(u.get("homeoffice"))
+
+    cur.execute("""
+        UPDATE job.offers SET
+            company_name_raw = COALESCE(company_name_raw, %s),
+            employment_type  = COALESCE(employment_type, %s),
+            employment_types = CASE WHEN employment_types IS NULL OR employment_types = '{}'
+                                    THEN %s ELSE employment_types END,
+            remote_type      = COALESCE(remote_type, %s),
+            locations_raw    = CASE WHEN locations_raw IS NULL OR locations_raw = '{}'
+                                    THEN %s ELSE locations_raw END,
+            salary_raw       = COALESCE(salary_raw, %s),
+            salary_min       = COALESCE(salary_min, %s),
+            salary_max       = COALESCE(salary_max, %s),
+            salary_period    = COALESCE(salary_period, %s),
+            salary_currency  = COALESCE(salary_currency, %s),
+            updated_at       = NOW()
+         WHERE id = %s
+    """, (
+        u.get("firma"),
+        uvazky[0] if uvazky else None,
+        uvazky or None,
+        rezim,
+        miesta or None,
+        u.get("mzda"),
+        smin, smax,
+        obdobie if smin else None,
+        "EUR" if smin else None,
+        offer_id,
+    ))
+    return True
 
 
 def uloz_detail(cur, offer_id, h, fetch_ms, fetch_bytes):
@@ -369,6 +592,14 @@ def uloz_detail(cur, offer_id, h, fetch_ms, fetch_bytes):
         UPDATE job.offers SET detail_fetched_at = NOW(), fetch_ms = %s, fetch_bytes = %s
          WHERE id = %s
     """, (fetch_ms, fetch_bytes, offer_id))
+
+    # Co portal uvadza ako ciselnik, precitame hned — netreba na to model.
+    try:
+        uloz_udaje(cur, offer_id, h)
+    except Exception as e:
+        # Vytazenie udajov je bonus; ked zlyha, ulozeny detail ma zostat.
+        print("    POZN. udaje sa nevytazili: %s" % str(e)[:80])
+
     return len(text)
 
 

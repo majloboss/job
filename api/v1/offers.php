@@ -281,6 +281,14 @@ json_ok([
 function offers_ocisti_html(?string $html): ?string {
     if ($html === null || trim($html) === '') return null;
 
+    // Najprv sa orezava na hlavny obsah stranky. Odstranit menu a paticku
+    // podla znaciek nestaci — portaly ich stavaju z obycajnych <div>. Ked
+    // ma stranka <main> alebo <article>, je to najspolahlivejsia hranica
+    // medzi inzeratom a okolim portalu.
+    if (preg_match('#<(main|article)\b[^>]*>(.*)</\1>#is', $html, $m)) {
+        $html = $m[2];
+    }
+
     // Nebezpecne prvky aj s obsahom.
     $html = preg_replace("#<(script|style|iframe|object|embed|form|noscript)\\b[^>]*>.*?</\\1>#is",
                          '', $html);
@@ -289,6 +297,13 @@ function offers_ocisti_html(?string $html): ?string {
 
     // Hlavicka a pata portalu do detailu inzeratu nepatria.
     $html = preg_replace("#<(nav|header|footer|aside)\\b[^>]*>.*?</\\1>#is", '', $html);
+
+    // Drobcekova navigacia — ariva.sk ju ma ako <ol class="breadcrumb">, teda
+    // mimo <nav>, takze predchadzajuce pravidlo ju nechytilo a v detaile
+    // zostal cislovany zoznam "1. ariva.sk 2. Volne pozicie 3. <nazov>".
+    $html = preg_replace(
+        "#<(ol|ul|div|nav)\\b[^>]*class=\"[^\"]*(?:breadcrumb|drobcek)[^\"]*\"[^>]*>.*?</\\1>#is",
+        '', $html);
 
     $html = strip_tags($html,
         '<h1><h2><h3><h4><h5><p><br><ul><ol><li><strong><b><em><i><u>'
@@ -300,6 +315,18 @@ function offers_ocisti_html(?string $html): ?string {
     // Prazdne odseky a nadpisy po ocisteni — portaly ich maju vela.
     $html = preg_replace('#<(p|h[1-5]|li)>\s*</\1>#i', '', $html);
     $html = preg_replace('#(<br>\s*){3,}#i', '<br><br>', $html);
+
+    // Ariva ma telo inzeratu zakodovane DVAKRAT — v zdroji je "&aacute;"
+    // ako text, takze v prehliadaci by sa zobrazilo doslova. Dekoduje sa
+    // az teraz, ked su nebezpecne prvky prec: skorsie dekodovanie by mohlo
+    // z neskodneho textu vyrobit platnu znacku.
+    //
+    // Entity ostrych zatvoriek sa zamerne NEDEKODUJU, inak by "&lt;script&gt;"
+    // v texte inzeratu prezil ocistenie a stal sa skutocnou znackou.
+    $html = preg_replace_callback(
+        '/&(?!lt;|gt;|amp;|#0*(?:60|62|38|39|34);)(?:[a-zA-Z][a-zA-Z0-9]{1,8};|#\d{2,6};)/',
+        static fn(array $m): string => html_entity_decode($m[0], ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+        $html);
 
     return mb_substr(trim($html), 0, 80000);
 }

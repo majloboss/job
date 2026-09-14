@@ -262,9 +262,18 @@ export default function Ponuky() {
                         </span>
                       )}
                     </td>
+                    {/* Kontraktorské portály klienta neuvádzajú. Prázdna
+                        bunka by vyzerala ako chyba zberu, preto sa ukáže
+                        aspoň to, že inzerát je agentúrny. */}
                     <td>
-                      {o.company_name_raw}
-                      {o.is_agency_offer && <span className="pon-agentura">agentúra</span>}
+                      {o.company_name_raw
+                        ? <>
+                            {o.company_name_raw}
+                            {o.is_agency_offer && <span className="pon-agentura">agentúra</span>}
+                          </>
+                        : o.is_agency_offer
+                          ? <span className="pon-agentura">agentúra</span>
+                          : <span className="pon-nic">—</span>}
                     </td>
                     <td>{UVAZKY[o.employment_type] || o.employment_type || ''}</td>
                     <td>{(o.locations_raw || []).join(', ')}</td>
