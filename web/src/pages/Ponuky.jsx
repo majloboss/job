@@ -46,7 +46,15 @@ const ZATVORENE = {
 const PRAZDNY = {
   q: '', source_id: '', industry: '', employment_type: '', remote_type: '',
   salary_min: '', dni: '', bez_agentur: false, aj_bez_mzdy: true,
+  // Uzavrete ponuky sa standardne nezobrazuju — prihlasit sa na ne neda.
+  stav: 'otvorene',
 };
+
+const STAVY = [
+  ['otvorene', 'Otvorené'],
+  ['uzavrete', 'Uzavreté'],
+  ['vsetky',   'Všetky'],
+];
 
 const STRANKA = 50;
 
@@ -150,6 +158,16 @@ export default function Ponuky() {
           placeholder="Hľadať v názve, firme, kľúčových slovách…"
           value={hladanie} onChange={e => setHladanie(e.target.value)}
         />
+
+        {/* Stav ponuky je prvý filter — mení, koľko inzerátov je vôbec
+            v hre, takže ostatné počty sa mu prispôsobujú. */}
+        <select value={filtre.stav} onChange={e => zmenaFiltra('stav', e.target.value)}>
+          {STAVY.map(([kod, text]) => (
+            <option key={kod} value={kod}>
+              {text}{c.stavy ? ` (${c.stavy[kod] ?? 0})` : ''}
+            </option>
+          ))}
+        </select>
 
         <select value={filtre.source_id} onChange={e => zmenaFiltra('source_id', e.target.value)}>
           <option value="">Všetky portály</option>

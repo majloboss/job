@@ -96,8 +96,19 @@ if (!empty($_GET['id'])) {
 // Kazdy filter je nepovinny. Skladaju sa cez AND: pouzivatel si zuzuje
 // vyber, nie rozsiruje.
 // ------------------------------------------------------------
-$kde  = ['o.is_active'];
 $args = [];
+
+// Otvorene / uzavrete ponuky.
+//
+// Standardne len otvorene — na uzavretu poziciu sa neda prihlasit. Da sa
+// vsak prepnut: na kontraktorskych portaloch tvoria uzavrete vacsinu
+// zoznamu (ariva.sk 173 z 239) a hovoria, o ake role tam byva zaujem.
+$stav = $_GET['stav'] ?? 'otvorene';
+$kde  = match ($stav) {
+    'uzavrete' => ['NOT o.is_active'],
+    'vsetky'   => [],
+    default    => ['o.is_active'],
+};
 
 // Fulltext cez nazov, firmu, sumar a kluc. slova. Hlada sa aj v prelozenom
 // nazve — inzerat v cestine sa ma dat najst slovenskym slovom.
@@ -196,7 +207,9 @@ $orderBy = $STLPCE[$radit] . ' ' . $smer . ' NULLS LAST, o.id DESC';
 $limit  = min(200, max(10, (int)($_GET['limit'] ?? 50)));
 $offset = max(0, (int)($_GET['offset'] ?? 0));
 
-$where = implode(' AND ', $kde);
+// Pri "vsetky stavy" a bez dalsich filtrov by $kde zostalo prazdne a v SQL
+// by vzniklo holé WHERE — TRUE drzi dotaz platny.
+$where = $kde ? implode(' AND ', $kde) : 'TRUE';
 
 // Vhodnost sa pripaja LEFT JOINom — inzerat sa ma zobrazit aj vtedy,
 // ked pre neho posudok este nebezal.
@@ -242,19 +255,35 @@ $spolu = (int)$stc->fetchColumn();
 
 // Hodnoty do rozbalovacich filtrov — len tie, ktore sa v datach naozaj
 // vyskytuju, aby sa neponukalo odvetvie s nula ponukami.
+//
+// Pocty respektuju zvoleny stav: pri prepnuti na uzavrete by inak filtre
+// ukazovali cisla z otvorenych ponuk a nesedeli by so zoznamom.
+$stavKde = match ($stav) {
+    'uzavrete' => 'NOT is_active',
+    'vsetky'   => 'TRUE',
+    default    => 'is_active',
+};
+$stavJoin = str_replace('is_active', 'o.is_active', $stavKde);
+
 $ciselniky = [
     'portaly' => $pdo->query(
-        'SELECT s.id, s.name, COUNT(o.id) AS pocet
-           FROM job.sources s LEFT JOIN job.offers o ON o.source_id = s.id AND o.is_active
-          GROUP BY s.id, s.name HAVING COUNT(o.id) > 0 ORDER BY s.name')->fetchAll(),
+        "SELECT s.id, s.name, COUNT(o.id) AS pocet
+           FROM job.sources s LEFT JOIN job.offers o ON o.source_id = s.id AND $stavJoin
+          GROUP BY s.id, s.name HAVING COUNT(o.id) > 0 ORDER BY s.name")->fetchAll(),
     'odvetvia' => $pdo->query(
-        'SELECT industry, COUNT(*) AS pocet FROM job.offers
-          WHERE is_active AND industry IS NOT NULL
-          GROUP BY industry ORDER BY COUNT(*) DESC, industry')->fetchAll(),
+        "SELECT industry, COUNT(*) AS pocet FROM job.offers
+          WHERE $stavKde AND industry IS NOT NULL
+          GROUP BY industry ORDER BY COUNT(*) DESC, industry")->fetchAll(),
     'uvazky' => $pdo->query(
-        'SELECT employment_type, COUNT(*) AS pocet FROM job.offers
-          WHERE is_active AND employment_type IS NOT NULL
-          GROUP BY employment_type ORDER BY COUNT(*) DESC')->fetchAll(),
+        "SELECT employment_type, COUNT(*) AS pocet FROM job.offers
+          WHERE $stavKde AND employment_type IS NOT NULL
+          GROUP BY employment_type ORDER BY COUNT(*) DESC")->fetchAll(),
+    // Kolko je ktoreho stavu — aby prepinac mohol ukazat pocty.
+    'stavy' => $pdo->query(
+        'SELECT COUNT(*) FILTER (WHERE is_active)     AS otvorene,
+                COUNT(*) FILTER (WHERE NOT is_active) AS uzavrete,
+                COUNT(*)                              AS vsetky
+           FROM job.offers')->fetch(),
 ];
 
 json_ok([
