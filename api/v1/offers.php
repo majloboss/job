@@ -289,6 +289,32 @@ function offers_ocisti_html(?string $html): ?string {
         $html = $m[2];
     }
 
+    // Prilohy pod inzeratom: "Podobne pozicie", "Dalsie ponuky" a pod. Je to
+    // zoznam CUDZICH inzeratov, takze v detaile nema co robit — na ariva.sk
+    // takto na koniec pribudlo dalsich 20 ponuk aj s platmi.
+    //
+    // Rezu sa podla NADPISU, nie podla obalujuceho prvku: ten je na ariva.sk
+    // obycajna <section class="section"> bez rozlisenia, rovnaka ako sekcia
+    // so samotnym inzeratom.
+    $html = preg_replace(
+        '#<h[1-4]\b[^>]*>(?:(?!</h[1-4]>).)*?'
+      . '(?:podobn\p{L}*\s+(?:pozíci|ponuk)|ďal[šs]\p{L}*\s+(?:pozíci|ponuk|inzer)'
+      . '|súvisiac\p{L}*\s+(?:pozíci|ponuk)|similar\s+jobs|related\s+jobs)'
+      . '.*$#isu',
+        '', $html);
+
+    // Ovladacie prvky portalu na konci inzeratu: zdielanie na socialne siete
+    // a vyzva na prihlasenie. Po ocisteni by zostali ako holy text
+    // ("Zdielat na Twitter", "Mam zaujem") a citali by sa ako sucast ponuky.
+    //
+    // Reze sa podla TRIEDY bloku, nie podla textu tlacidiel: rovnake slova
+    // sa mozu vyskytnut aj v samotnom inzerate a rez do konca dokumentu by
+    // vtedy zahodil kus ponuky.
+    $html = preg_replace(
+        '#<(div|ul|section)\b[^>]*class="[^"]*'
+      . '(?:share-list|job-share|social-share|share-buttons)[^"]*"[^>]*>.*$#isu',
+        '', $html);
+
     // Nebezpecne prvky aj s obsahom.
     $html = preg_replace("#<(script|style|iframe|object|embed|form|noscript)\\b[^>]*>.*?</\\1>#is",
                          '', $html);
