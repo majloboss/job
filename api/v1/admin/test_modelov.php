@@ -214,18 +214,22 @@ json_ok([
 function test_ocisti_html(?string $html): ?string {
     if ($html === null || trim($html) === '') return null;
 
-    // Nebezpecne prvky aj s obsahom.
-    $html = preg_replace('#<(script|style|iframe|object|embed|form)[^>]*>.*?</>#is',
-                         '', $html);
-    $html = preg_replace('#<(script|style|iframe|object|embed|form|input)[^>]*/?>#i',
-                         '', $html);
+    // Nebezpecne prvky aj s obsahom. Vzory su v dvojitych uvodzovkach,
+    // aby sa apostrof v triede znakov nemusel escapovat.
+    $html = preg_replace("#<(script|style|iframe|object|embed|form)\\b[^>]*>.*?</\\1>#is",
+                         "", $html);
+    $html = preg_replace("#<(script|style|iframe|object|embed|form|input)\\b[^>]*/?>#i",
+                         "", $html);
 
-    $html = strip_tags($html, '<h1><h2><h3><h4><p><br><ul><ol><li><strong><b><em><i><ins><table><tr><td><th><thead><tbody>');
+    $html = strip_tags($html,
+        "<h1><h2><h3><h4><p><br><ul><ol><li><strong><b><em><i><ins>"
+      . "<table><tr><td><th><thead><tbody>");
 
-    // Atributy on* (onclick, onerror) a javascript: v href.
-    $html = preg_replace('#\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)#i', '', $html);
-    $html = preg_replace('#\s+(href|src)\s*=\s*("|')?\s*javascript:[^"'>]*("|')?#i',
-                         '', $html);
+    // Atributy on* (onclick, onerror) a javascript: v href/src.
+    $html = preg_replace("#\s+on\w+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)#i",
+                         "", $html);
+    $html = preg_replace("#\s+(href|src)\s*=\s*[\"']?\s*javascript:[^\"'>]*[\"']?#i",
+                         "", $html);
 
     return mb_substr(trim($html), 0, 60000);
 }
