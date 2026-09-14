@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { Fragment, useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../api';
 import './Ponuky.css';
 
@@ -11,14 +11,19 @@ import './Ponuky.css';
 // Radenie a strankovanie robi SERVER, nie prehliadac: pri tisickach inzeratov
 // by sa nedalo zoradit to, co prave nie je nacitane.
 
+// Každý údaj má vlastný stĺpec — v jednej bunke sa nedali porovnávať
+// medzi riadkami ani zoradiť.
 const STLPCE = [
   { kod: 'title',        text: 'Pozícia',  hlavny: true },
   { kod: 'company',      text: 'Firma' },
-  { kod: 'salary',       text: 'Mzda' },
+  { kod: 'uvazok',       text: 'Úväzok' },
+  { kod: 'lokalita',     text: 'Lokalita' },
+  { kod: 'remote',       text: 'Réžim' },
+  { kod: 'salary',       text: 'Mzda',     cislo: true },
   { kod: 'industry',     text: 'Odvetvie' },
   { kod: 'source',       text: 'Portál' },
   { kod: 'published_at', text: 'Zverejnené' },
-  { kod: 'score',        text: 'Vhodnosť' },
+  { kod: 'score',        text: 'Vhodnosť', cislo: true },
 ];
 
 const UVAZKY = {
@@ -27,6 +32,14 @@ const UVAZKY = {
 };
 
 const REZIMY = { onsite: 'Na pracovisku', hybrid: 'Hybridne', remote: 'Z domu' };
+
+// Krátke označenie do tabuľky — plný názov by rozťahoval stĺpec.
+const REZIMY_KRATKO = { onsite: 'pracovisko', hybrid: 'hybrid', remote: 'z domu' };
+
+// Preco uz inzerat neplati — scraper to zisti z textu zoznamu.
+const ZATVORENE = {
+  obsadene: 'obsadené', zmizol: 'stiahnutý', expiroval: 'expirovaný',
+};
 
 // Prazdny filter = "nefiltruj". Drzi sa v jednom objekte, aby sa dal naraz
 // vynulovat aj poslat na server.
@@ -46,7 +59,9 @@ export default function Ponuky() {
   const [dta, setDta]         = useState(null);
   const [nacitava, setNacitava] = useState(true);
   const [chyba, setChyba]     = useState(null);
-  const [detail, setDetail]   = useState(null);
+  // Detail sa rozbalí POD riadkom, nie v prekrytí — pri porovnávaní ponúk
+  // je lepšie vidieť ho v kontexte zoznamu. Otvorených môže byť viac naraz.
+  const [otvorene, setOtvorene] = useState(() => new Map());
 
   // Hladanie sa neposiela pri kazdom pismene — az ked pouzivatel prestane
   // pisat. Inak by kazde stlacenie klavesy znamenalo dopyt do DB.
@@ -97,12 +112,19 @@ export default function Ponuky() {
     setOffset(0);
   }
 
-  async function otvorit(id) {
-    setDetail({ nacitava: true });
+  // Detail sa dotiahne až pri rozkliknutí — obsahuje celé HTML inzerátu,
+  // ktoré má desiatky kB a do zoznamu nepatrí.
+  async function prepniDetail(id) {
+    if (otvorene.has(id)) {
+      setOtvorene(p => { const n = new Map(p); n.delete(id); return n; });
+      return;
+    }
+    setOtvorene(p => new Map(p).set(id, { nacitava: true }));
     try {
-      setDetail(await api('/v1/offers?id=' + id));
+      const d = await api('/v1/offers?id=' + id);
+      setOtvorene(p => new Map(p).set(id, d));
     } catch (e) {
-      setDetail({ chyba: e.message });
+      setOtvorene(p => new Map(p).set(id, { chyba: e.message }));
     }
   }
 
@@ -220,36 +242,63 @@ export default function Ponuky() {
             </tr>
           </thead>
           <tbody>
-            {offers.map(o => (
-              <tr key={o.id} onClick={() => otvorit(o.id)}>
-                <td className="hlavny">
-                  <span className="pon-titul">{o.title_sk || o.title}</span>
-                  {o.summary_sk && <span className="pon-sumar">{o.summary_sk}</span>}
-                  {o.technologies?.length > 0 && (
-                    <span className="pon-tagy">
-                      {o.technologies.slice(0, 6).map(t => (
-                        <span key={t} className="pon-tag">{t}</span>
-                      ))}
-                    </span>
+            {offers.map(o => {
+              const det = otvorene.get(o.id);
+              return (
+                <Fragment key={o.id}>
+                  <tr className={det ? 'otvoreny' : ''}>
+                    {/* Detail otvara VYLUCNE nazov pozicie — v riadku su
+                        aj vlastne odkazy a klik na cely riadok by ich prekryl. */}
+                    <td className="hlavny">
+                      <button type="button" className="pon-titul"
+                              onClick={() => prepniDetail(o.id)}
+                              aria-expanded={!!det}>
+                        <span className="pon-znak">{det ? '▾' : '▸'}</span>
+                        {o.title_sk || o.title}
+                      </button>
+                      {o.is_active === false && (
+                        <span className="pon-uzavrete">
+                          {ZATVORENE[o.closed_reason] || 'neaktívny'}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {o.company_name_raw}
+                      {o.is_agency_offer && <span className="pon-agentura">agentúra</span>}
+                    </td>
+                    <td>{UVAZKY[o.employment_type] || o.employment_type || ''}</td>
+                    <td>{(o.locations_raw || []).join(', ')}</td>
+                    <td>{REZIMY_KRATKO[o.remote_type] || ''}</td>
+                    <td className="pon-cislo">{mzda(o)}</td>
+                    <td>{o.industry}</td>
+                    {/* Portal je odkaz na povodny inzerat — najkratsia cesta
+                        k originalu bez otvarania detailu. */}
+                    <td>
+                      <a className="pon-portal" href={o.url}
+                         target="_blank" rel="noreferrer noopener"
+                         title={'Otvoriť originál: ' + o.url}>
+                        {o.source_name}
+                      </a>
+                    </td>
+                    <td className="pon-cislo" title={o.published_at || ''}>
+                      {datum(o.published_at || o.created_at)}
+                    </td>
+                    <td className="pon-cislo">
+                      {o.score !== null
+                        ? <span className={'pon-skore ' + (o.bucket || '')}>{o.score}</span>
+                        : <span className="pon-nic">—</span>}
+                    </td>
+                  </tr>
+                  {det && (
+                    <tr className="pon-detail-riadok">
+                      <td colSpan={STLPCE.length}>
+                        <Detail data={det} zavri={() => prepniDetail(o.id)} />
+                      </td>
+                    </tr>
                   )}
-                </td>
-                <td>
-                  {o.company_name_raw}
-                  {o.is_agency_offer && <span className="pon-agentura">agentúra</span>}
-                </td>
-                <td className="pon-cislo">{mzda(o)}</td>
-                <td>{o.industry}</td>
-                <td>{o.source_name}</td>
-                <td className="pon-cislo" title={o.published_at || ''}>
-                  {datum(o.published_at || o.created_at)}
-                </td>
-                <td className="pon-cislo">
-                  {o.score !== null
-                    ? <span className={'pon-skore ' + (o.bucket || '')}>{o.score}</span>
-                    : <span className="pon-nic">—</span>}
-                </td>
-              </tr>
-            ))}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
 
@@ -273,13 +322,16 @@ export default function Ponuky() {
         </div>
       )}
 
-      {detail && <Detail data={detail} zavri={() => setDetail(null)} />}
     </div>
   );
 }
 
 // ------------------------------------------------------------
-// Detail inzeratu v prekrytí.
+// Detail inzeratu rozbaleny pod riadkom.
+//
+// Server posiela ocistene HTML povodnej stranky, takze struktura inzeratu
+// (nadpisy, odrazky, tabulky) zostava rovnaka pre vsetky portaly. Predtym
+// sa zobrazoval len holy text a napr. zoznam poziadaviek splynul do odseku.
 //
 // Original sa nikdy neprepisuje — ked je inzerat v inom jazyku, da sa
 // prepnut medzi prekladom a originalom.
@@ -287,95 +339,88 @@ export default function Ponuky() {
 function Detail({ data, zavri }) {
   const [jazyk, setJazyk] = useState('preklad');
 
-  // Zavretie klavesou Esc — na desktope prirodzenejsie nez hladat krizik.
-  useEffect(() => {
-    const f = e => { if (e.key === 'Escape') zavri(); };
-    window.addEventListener('keydown', f);
-    return () => window.removeEventListener('keydown', f);
-  }, [zavri]);
-
-  if (data.nacitava) return <div className="pon-prekrytie"><div className="pon-detail">Načítavam…</div></div>;
-  if (data.chyba)    return (
-    <div className="pon-prekrytie" onClick={zavri}>
-      <div className="pon-detail pon-chyba">{data.chyba}</div>
-    </div>
-  );
+  if (data.nacitava) return <div className="pon-detail">Načítavam…</div>;
+  if (data.chyba)    return <div className="pon-detail pon-chyba">{data.chyba}</div>;
 
   const o = data.offer;
   const maPreklad = !!data.obsah?.preklad;
   const obsah = (jazyk === 'preklad' && maPreklad) ? data.obsah.preklad : data.obsah?.original;
 
   return (
-    <div className="pon-prekrytie" onClick={zavri}>
-      <div className="pon-detail" onClick={e => e.stopPropagation()}>
-        <button className="pon-zavri" onClick={zavri} aria-label="Zavrieť">×</button>
-
+    <div className="pon-detail">
+      <div className="pon-detail-hlava">
         <h2>{o.title_sk || o.title}</h2>
-        <p className="pon-meta">
-          {o.company_name_raw}
-          {o.is_agency_offer && <span className="pon-agentura">agentúra</span>}
-          {' · '}{o.source_name}
-          {' · '}{datum(o.published_at || o.created_at)}
-        </p>
-
-        <dl className="pon-udaje">
-          {mzda(o) !== '—' && <><dt>Mzda</dt><dd>{o.salary_raw || mzda(o)}</dd></>}
-          {o.employment_type && <><dt>Úväzok</dt><dd>{UVAZKY[o.employment_type] || o.employment_type}</dd></>}
-          {o.remote_type && <><dt>Režim</dt><dd>{REZIMY[o.remote_type] || o.remote_type}</dd></>}
-          {o.seniority && <><dt>Úroveň</dt><dd>{o.seniority}</dd></>}
-          {o.industry && <><dt>Odvetvie</dt><dd>{o.industry}</dd></>}
-          {o.locations?.length > 0 && (
-            <><dt>Miesto</dt><dd>{o.locations.map(l => l.name).join(', ')}</dd></>
-          )}
-          {o.education_level && <><dt>Vzdelanie</dt><dd>{o.education_level}</dd></>}
-          {o.start_date && <><dt>Nástup</dt><dd>{o.start_date}</dd></>}
-        </dl>
-
-        {o.summary_sk && <p className="pon-sumar-detail">{o.summary_sk}</p>}
-
-        {o.technologies?.length > 0 && (
-          <p className="pon-tagy">
-            {o.technologies.map(t => <span key={t} className="pon-tag">{t}</span>)}
-          </p>
-        )}
-
-        {maPreklad && (
-          <div className="pon-jazyky">
-            <button className={jazyk === 'preklad' ? 'aktivny' : ''}
-                    onClick={() => setJazyk('preklad')}>Slovensky</button>
-            <button className={jazyk === 'original' ? 'aktivny' : ''}
-                    onClick={() => setJazyk('original')}>
-              Originál ({data.obsah.original?.lang || o.orig_lang})
-            </button>
-          </div>
-        )}
-
-        {obsah?.text && <pre className="pon-text">{obsah.text}</pre>}
-
-        {/* Adminovi navyse: cim a za kolko sa inzerat vytazil. */}
-        {o.zber?.length > 0 && (
-          <details className="pon-zber">
-            <summary>Zber údajov ({o.zber.length})</summary>
-            <table>
-              <tbody>
-                {o.zber.map((z, i) => (
-                  <tr key={i}>
-                    <td>{z.model_id}</td>
-                    <td>{z.status}</td>
-                    <td>{z.total_tokens} tok.</td>
-                    <td>{z.cost_usd ? '$' + Number(z.cost_usd).toFixed(5) : '—'}</td>
-                    <td>{z.took_ms ? Math.round(z.took_ms / 100) / 10 + ' s' : ''}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </details>
-        )}
-
-        <a className="pon-original" href={o.url} target="_blank" rel="noreferrer noopener">
-          Otvoriť originál na {o.source_name} →
-        </a>
+        <button className="pon-zavri" onClick={zavri} aria-label="Zavrieť">×</button>
       </div>
+
+      <p className="pon-meta">
+        {o.company_name_raw}
+        {o.is_agency_offer && <span className="pon-agentura">agentúra</span>}
+        {' · '}{o.source_name}
+        {' · '}{datum(o.published_at || o.created_at)}
+      </p>
+
+      <dl className="pon-udaje">
+        {mzda(o) !== '—' && <><dt>Mzda</dt><dd>{o.salary_raw || mzda(o)}</dd></>}
+        {o.employment_type && <><dt>Úväzok</dt><dd>{UVAZKY[o.employment_type] || o.employment_type}</dd></>}
+        {o.remote_type && <><dt>Režim</dt><dd>{REZIMY[o.remote_type] || o.remote_type}</dd></>}
+        {o.seniority && <><dt>Úroveň</dt><dd>{o.seniority}</dd></>}
+        {o.industry && <><dt>Odvetvie</dt><dd>{o.industry}</dd></>}
+        {o.locations?.length > 0 && (
+          <><dt>Miesto</dt><dd>{o.locations.map(l => l.name).join(', ')}</dd></>
+        )}
+        {o.education_level && <><dt>Vzdelanie</dt><dd>{o.education_level}</dd></>}
+        {o.start_date && <><dt>Nástup</dt><dd>{o.start_date}</dd></>}
+      </dl>
+
+      {o.summary_sk && <p className="pon-sumar-detail">{o.summary_sk}</p>}
+
+      {o.technologies?.length > 0 && (
+        <p className="pon-tagy">
+          {o.technologies.map(t => <span key={t} className="pon-tag">{t}</span>)}
+        </p>
+      )}
+
+      {maPreklad && (
+        <div className="pon-jazyky">
+          <button className={jazyk === 'preklad' ? 'aktivny' : ''}
+                  onClick={() => setJazyk('preklad')}>Slovensky</button>
+          <button className={jazyk === 'original' ? 'aktivny' : ''}
+                  onClick={() => setJazyk('original')}>
+            Originál ({data.obsah.original?.lang || o.orig_lang})
+          </button>
+        </div>
+      )}
+
+      {/* HTML je ocistene uz na serveri (offers_ocisti_html) — zostavaju
+          len znacky pre strukturu, ziadne skripty ani atributy. */}
+      {obsah?.html
+        ? <div className="pon-html" dangerouslySetInnerHTML={{ __html: obsah.html }} />
+        : obsah?.text && <pre className="pon-text">{obsah.text}</pre>}
+
+      {/* Adminovi navyse: cim a za kolko sa inzerat vytazil. */}
+      {o.zber?.length > 0 && (
+        <details className="pon-zber">
+          <summary>Zber údajov ({o.zber.length})</summary>
+          <table>
+            <tbody>
+              {o.zber.map((z, i) => (
+                <tr key={i}>
+                  <td>{z.model_id}</td>
+                  <td>{z.status}</td>
+                  <td>{z.total_tokens} tok.</td>
+                  <td>{z.cost_usd ? '$' + Number(z.cost_usd).toFixed(5) : '—'}</td>
+                  <td>{z.took_ms ? Math.round(z.took_ms / 100) / 10 + ' s' : ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      )}
+
+      <a className="pon-original" href={o.url} target="_blank" rel="noreferrer noopener">
+        Otvoriť originál na {o.source_name} →
+      </a>
     </div>
   );
 }

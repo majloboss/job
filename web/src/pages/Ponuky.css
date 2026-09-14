@@ -7,7 +7,9 @@
    Od 900 px je to naozajstna tabulka s klikatelnymi hlavickami.
    ============================================================ */
 
-.ponuky { padding: 16px; max-width: 1200px; margin: 0 auto; }
+/* Bez obmedzenia sirky — na sirokom monitore sa tak zmestia vsetky
+   stlpce naraz a ponuky sa daju porovnavat bez vodorovneho posuvania. */
+.ponuky { padding: 16px; }
 
 .ponuky h1 {
   margin: 0 0 16px;
@@ -82,10 +84,8 @@
   border-radius: var(--radius);
   margin-bottom: 10px;
   padding: 12px;
-  cursor: pointer;
   background: var(--bg);
 }
-.pon-tabulka tr:active { background: var(--panel); }
 
 .pon-tabulka td { display: block; padding: 0; border: 0; }
 
@@ -97,11 +97,38 @@
 }
 .pon-tabulka td:empty { display: none; }
 
+/* Titul je jedine klikatelne miesto pre detail — preto tlacidlo, nie span:
+   funguje aj z klavesnice a citacky ho ohlasia ako rozbalovac. */
 .pon-titul {
   display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
   font-weight: 600;
   font-size: 16px;
   color: var(--fg);
+  cursor: pointer;
+}
+.pon-titul:hover { color: var(--accent); }
+.pon-znak { display: inline-block; width: 14px; color: var(--muted); }
+
+/* Portal vedie priamo na povodny inzerat. */
+.pon-portal { color: var(--accent); text-decoration: none; }
+.pon-portal:hover { text-decoration: underline; }
+
+/* Inzerat, ktory uz neplati — zoznam ho stale ukazuje, len stlmene. */
+.pon-uzavrete {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
 }
 /* Sumar je 2-3 vety; v zozname staci nahlad na dva riadky. */
 .pon-sumar {
@@ -174,34 +201,27 @@
 .pon-strankovanie button:disabled { opacity: .4; cursor: default; }
 
 /* ============================================================
-   DETAIL — prekrytie
+   DETAIL — rozbaleny pod riadkom
    ============================================================ */
-.pon-prekrytie {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  background: rgba(0, 0, 0, .5);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 0;
-}
+.pon-tabulka tr.otvoreny { background: var(--panel); }
+.pon-detail-riadok > td { padding: 0 !important; background: var(--panel); }
 
 .pon-detail {
   position: relative;
-  background: var(--bg);
-  border-radius: var(--radius) var(--radius) 0 0;
-  padding: 20px 16px 32px;
-  width: 100%;
-  max-height: 92vh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  background: var(--panel);
+  border-left: 3px solid var(--accent);
+  padding: 16px 18px 20px;
+}
+
+.pon-detail-hlava {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .pon-zavri {
-  position: absolute;
-  top: 8px;
-  right: 8px;
+  flex: 0 0 auto;
   width: var(--dotyk);
   height: var(--dotyk);
   border: 0;
@@ -212,7 +232,7 @@
   cursor: pointer;
 }
 
-.pon-detail h2 { margin: 0 32px 6px 0; font-size: 19px; }
+.pon-detail h2 { margin: 0 0 6px; font-size: 19px; }
 .pon-meta { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
 
 .pon-udaje {
@@ -228,7 +248,7 @@
 .pon-sumar-detail {
   padding: 10px 12px;
   border-left: 3px solid var(--accent);
-  background: var(--panel);
+  background: var(--bg);
   border-radius: 0 var(--radius) var(--radius) 0;
   margin: 0 0 14px;
   font-size: 15px;
@@ -263,6 +283,48 @@
   color: var(--fg);
 }
 
+/* HTML inzeratu prichadza zo servera ocistene na holu strukturu. Kazdy
+   portal tak vyzera rovnako — vlastne farby a rozostupy stranok su prec
+   a rozdiely medzi inzeratmi su v obsahu, nie v grafike. */
+.pon-html {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--fg);
+  margin: 0 0 16px;
+  overflow-wrap: break-word;
+}
+.pon-html h1, .pon-html h2, .pon-html h3,
+.pon-html h4, .pon-html h5 {
+  margin: 16px 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.pon-html h1:first-child, .pon-html h2:first-child { margin-top: 0; }
+.pon-html p  { margin: 0 0 10px; }
+.pon-html ul, .pon-html ol { margin: 0 0 10px; padding-left: 20px; }
+.pon-html li { margin-bottom: 4px; }
+.pon-html strong, .pon-html b { font-weight: 600; }
+.pon-html hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+.pon-html blockquote {
+  margin: 0 0 10px;
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+  color: var(--muted);
+}
+.pon-html dl { margin: 0 0 10px; }
+.pon-html dt { color: var(--muted); }
+.pon-html dd { margin: 0 0 6px; }
+
+/* Siroka tabulka sa posuva vo vlastnom ramci, nie celou strankou. */
+.pon-html table { border-collapse: collapse; margin: 0 0 12px; display: block; overflow-x: auto; }
+.pon-html td, .pon-html th {
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
 .pon-zber { margin: 12px 0; font-size: 13px; color: var(--muted); }
 .pon-zber summary { cursor: pointer; min-height: 36px; line-height: 36px; }
 .pon-zber table { width: 100%; border-collapse: collapse; margin-top: 6px; }
@@ -291,6 +353,7 @@
   .pon-tabulka thead { display: table-header-group; }
   .pon-tabulka tr { display: table-row; border: 0; margin: 0; padding: 0; border-radius: 0; }
   .pon-tabulka tr:hover { background: var(--panel); }
+  .pon-detail-riadok:hover { background: none; }
 
   .pon-tabulka th {
     padding: 8px 10px;
@@ -317,18 +380,15 @@
   }
   .pon-tabulka td:empty { display: table-cell; }
   .pon-tabulka td:not(.hlavny) { font-size: 14px; }
-  .pon-tabulka td.hlavny { max-width: 420px; }
+  .pon-tabulka td.hlavny { max-width: 460px; }
   .pon-cislo { white-space: nowrap; }
 
   /* V tabulke uz sumar zabera prilis vela miesta — staci v detaile. */
   .pon-sumar { -webkit-line-clamp: 1; }
 
-  /* Detail vystreduje ako dialog, nie ako spodny panel. */
-  .pon-prekrytie { align-items: center; padding: 24px; }
-  .pon-detail {
-    max-width: 780px;
-    border-radius: var(--radius);
-    padding: 24px 28px 28px;
-    max-height: 86vh;
-  }
+  .pon-detail { padding: 20px 24px 24px; }
+
+  /* Text inzeratu sa nerozbieha cez cely siroky monitor — dlhy riadok
+     sa zle cita. Ostatne udaje stlpec neobmedzuje. */
+  .pon-html, .pon-text { max-width: 900px; }
 }

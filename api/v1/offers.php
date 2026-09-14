@@ -63,6 +63,18 @@ if (!empty($_GET['id'])) {
     $offer['keywords']         = pg_pole($offer['keywords']);
     $offer['technologies']     = pg_pole($offer['technologies']);
     $offer['employment_types'] = pg_pole($offer['employment_types']);
+    $offer['locations_raw']    = pg_pole($offer['locations_raw']);
+    $offer['is_active']        = ai_je_true_offers($offer['is_active']);
+
+    // HTML zo zdroja ide priamo do stranky, takze sa musi ocistit — inzerat
+    // moze obsahovat <script>, sledovacie pixely aj styly, ktore by rozbili
+    // vzhlad. Ponechaju sa len znacky, z ktorych sa da poskladat citatelny
+    // text; vysledok je tak rovnaky bez ohladu na portal.
+    foreach (['original', 'preklad'] as $kluc) {
+        if ($obsah[$kluc] !== null) {
+            $obsah[$kluc]['html'] = offers_ocisti_html($obsah[$kluc]['html']);
+        }
+    }
 
     // Adminovi navyse: cim a za kolko sa inzerat vytazil.
     if ($jeAdmin) {
@@ -165,6 +177,9 @@ $STLPCE = [
     'industry'     => 'o.industry',
     'source'       => 's.name',
     'score'        => 'm.score',
+    'lokalita'     => 'o.locations_raw[1]',
+    'uvazok'       => 'o.employment_type',
+    'remote'       => 'o.remote_type',
 ];
 
 $radit = $_GET['radit'] ?? 'published_at';
@@ -189,7 +204,8 @@ $sql = "SELECT o.id, o.external_id, o.url, o.title, o.title_sk, o.summary_sk,
                o.company_name_raw, o.is_agency_offer, o.industry,
                o.salary_raw, o.salary_min, o.salary_max, o.salary_currency,
                o.salary_period, o.employment_type, o.employment_types, o.remote_type, o.seniority,
-               o.keywords, o.technologies, o.orig_lang,
+               o.keywords, o.technologies, o.locations_raw, o.orig_lang,
+               o.is_active, o.closed_reason,
                o.published_at, o.published_at_raw, o.created_at, o.last_seen_at,
                s.name AS source_name, s.code AS source_code,
                m.score, m.bucket, m.summary AS match_summary, m.distance_km
@@ -207,7 +223,9 @@ $offers = $st->fetchAll();
 foreach ($offers as &$o) {
     $o['keywords']         = pg_pole($o['keywords']);
     $o['employment_types'] = pg_pole($o['employment_types']);
-    $o['technologies']    = pg_pole($o['technologies']);
+    $o['technologies']     = pg_pole($o['technologies']);
+    $o['locations_raw']    = pg_pole($o['locations_raw']);
+    $o['is_active']        = ai_je_true_offers($o['is_active']);
     $o['is_agency_offer'] = $o['is_agency_offer'] === null
                           ? null : ai_je_true_offers($o['is_agency_offer']);
     $o['score']           = $o['score'] !== null ? (int)$o['score'] : null;
@@ -249,6 +267,42 @@ json_ok([
     'ciselniky' => $ciselniky,
     'je_admin'  => $jeAdmin,
 ]);
+
+// ------------------------------------------------------------
+// Ocisti HTML inzeratu pred zobrazenim.
+//
+// Kazdy portal ma vlastnu strukturu a vlastny balast — skripty, sledovacie
+// pixely, triedy, styly. Po ocisteni zostane len obsah v beznych znackach,
+// takze detail vyzera rovnako bez ohladu na to, odkial inzerat je.
+//
+// Zaroven je to bezpecnostna vec: obsah pochadza z cudzej stranky a ide
+// priamo do DOM.
+// ------------------------------------------------------------
+function offers_ocisti_html(?string $html): ?string {
+    if ($html === null || trim($html) === '') return null;
+
+    // Nebezpecne prvky aj s obsahom.
+    $html = preg_replace("#<(script|style|iframe|object|embed|form|noscript)\\b[^>]*>.*?</\\1>#is",
+                         '', $html);
+    $html = preg_replace("#<(script|style|iframe|object|embed|form|input|img)\\b[^>]*/?>#i",
+                         '', $html);
+
+    // Hlavicka a pata portalu do detailu inzeratu nepatria.
+    $html = preg_replace("#<(nav|header|footer|aside)\\b[^>]*>.*?</\\1>#is", '', $html);
+
+    $html = strip_tags($html,
+        '<h1><h2><h3><h4><h5><p><br><ul><ol><li><strong><b><em><i><u>'
+      . '<table><thead><tbody><tr><td><th><dl><dt><dd><blockquote><hr>');
+
+    // Atributy: ponechava sa iba obsah, ziadne triedy, styly ani udalosti.
+    $html = preg_replace('#<([a-z][a-z0-9]*)\s[^>]*>#i', '<\1>', $html);
+
+    // Prazdne odseky a nadpisy po ocisteni — portaly ich maju vela.
+    $html = preg_replace('#<(p|h[1-5]|li)>\s*</\1>#i', '', $html);
+    $html = preg_replace('#(<br>\s*){3,}#i', '<br><br>', $html);
+
+    return mb_substr(trim($html), 0, 80000);
+}
 
 // ------------------------------------------------------------
 // PostgreSQL vracia TEXT[] ako retazec '{a,b,"c d"}'. Bez rozbalenia by
