@@ -604,6 +604,29 @@ def uloz_detail(cur, offer_id, h, fetch_ms, fetch_bytes):
     return len(text)
 
 
+# Priebezny stav behu.
+#
+# Pocty sa predtym zapisovali AZ na konci, takze obrazovka celu tu dobu
+# ukazovala same nuly a beh vyzeral zaseknuto — pri 239 inzeratoch Arivy
+# to bolo aj osem minut.
+def zapis_priebeh(conn, run_id, najdene, novych, detailov, chyb):
+    if not run_id:
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE job.scrape_runs
+               SET offers_found = %s, offers_new = %s,
+                   details_fetched = %s, errors_count = %s
+             WHERE id = %s
+        """, (najdene, novych, detailov, chyb, run_id))
+        cur.close()
+        conn.commit()
+    except Exception:
+        # Stav je len informacia navyse — zber kvoli nemu nema padat.
+        conn.rollback()
+
+
 # ============================================================
 # Zber jedneho portalu
 # ============================================================
@@ -713,6 +736,7 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov, run_id=None):
             conn.rollback()
             print("  CHYBA ulozenia %s: %s" % (u[-40:], str(e)[:60]))
     conn.commit()
+    zapis_priebeh(conn, run_id, najdene, novych, detailov, chyb)
     print("  Ulozenych: %d, z toho novych: %d%s"
           % (najdene, novych,
              (", uzavretych: %d" % uzavretych) if uzavretych else ""))
@@ -728,6 +752,7 @@ def zbieraj_portal(conn, zdroj, limit, bez_detailov, run_id=None):
                 detailov += 1
                 conn.commit()
                 if detailov % 10 == 0 or detailov == len(na_detail):
+                    zapis_priebeh(conn, run_id, najdene, novych, detailov, chyb)
                     print("    %d/%d hotovo" % (detailov, len(na_detail)))
             except Exception as e:
                 chyb += 1
