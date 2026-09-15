@@ -177,6 +177,31 @@
 .pon-skore.nevhodne     { background: color-mix(in srgb, var(--bad) 14%, transparent);  color: var(--bad); }
 .pon-nic { color: var(--muted); }
 
+/* Výber záujmu priamo v riadku. Farba podľa číselníka, takže stav je
+   vidieť aj bez čítania textu. */
+.pon-zaujem {
+  min-height: 28px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  max-width: 130px;
+}
+.pon-zaujem.ok {
+  border-color: var(--ok);
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+}
+.pon-zaujem.bad {
+  border-color: color-mix(in srgb, var(--bad) 45%, transparent);
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 8%, transparent);
+}
+
 /* --- strankovanie --- */
 .pon-strankovanie {
   display: flex;

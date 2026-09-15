@@ -24,6 +24,7 @@ const STLPCE = [
   { kod: 'source',       text: 'Portál' },
   { kod: 'published_at', text: 'Zverejnené' },
   { kod: 'score',        text: 'Vhodnosť', cislo: true },
+  { kod: 'zaujem',       text: 'Záujem' },
 ];
 
 const UVAZKY = {
@@ -55,7 +56,19 @@ const PRAZDNY = {
   salary_min: '', dni: '', bez_agentur: false, aj_bez_mzdy: true,
   // Neaktualne ponuky sa standardne nezobrazuju — prihlasit sa na ne neda.
   stav: 'otvorene',
+  // Zamietnute ponuky sa standardne skryvaju — to je zmysel priznaku.
+  moj_stav: 'bez_nezaujmu',
 };
+
+// Volby filtra podla vlastneho zaujmu. Kody stavov prichadzaju z ciselnika
+// zo servera, tieto tri su navyse a tykaju sa vyberu, nie stavu samotneho.
+const VYBERY_ZAUJMU = [
+  ['bez_nezaujmu',  'Okrem nezáujmu'],
+  ['vsetky',        'Bez ohľadu na záujem'],
+  ['nevyhodnotene', 'Len nevyhodnotené'],
+  ['zaujem',        'Len so záujmom'],
+  ['nezaujem',      'Len nezáujem'],
+];
 
 // Filter plati pre VSETKY portaly naraz, takze pomenovanie musi sediet na
 // kazdy dovod: ariva.sk pise OBSADENE, titans.eu NEPRIJIMAME ZAUJEMCOV,
@@ -131,6 +144,25 @@ export default function Ponuky() {
     setOffset(0);
   }
 
+  // Zmena záujmu sa premietne HNEĎ, bez čakania na server: pri prechádzaní
+  // zoznamu je odozva dôležitejšia než presnosť o pár stoviek milisekúnd.
+  // Keď zápis zlyhá, zoznam sa načíta odznova a hodnota sa vráti.
+  async function zmenitZaujem(id, kod) {
+    setDta(d => ({
+      ...d,
+      offers: d.offers.map(o => (o.id === id ? { ...o, moj_stav: kod || null } : o)),
+    }));
+    try {
+      await api('/v1/offers?id=' + id, { method: 'POST', body: { stav: kod } });
+      // Pri skrývajúcom stave ponuka z výpisu zmizne — treba prekresliť.
+      const sz = (c.stavy_zaujmu || []).find(x => x.kod === kod);
+      if (sz?.skryva && filtre.moj_stav === 'bez_nezaujmu') await nacitat();
+    } catch (e) {
+      setChyba(e.message);
+      await nacitat();
+    }
+  }
+
   // Detail sa dotiahne až pri rozkliknutí — obsahuje celé HTML inzerátu,
   // ktoré má desiatky kB a do zoznamu nepatrí.
   async function prepniDetail(id) {
@@ -177,6 +209,13 @@ export default function Ponuky() {
             <option key={kod} value={kod}>
               {text}{c.stavy ? ` (${c.stavy[kod] ?? 0})` : ''}
             </option>
+          ))}
+        </select>
+
+        <select value={filtre.moj_stav}
+                onChange={e => zmenaFiltra('moj_stav', e.target.value)}>
+          {VYBERY_ZAUJMU.map(([kod, text]) => (
+            <option key={kod} value={kod}>{text}</option>
           ))}
         </select>
 
@@ -328,6 +367,16 @@ export default function Ponuky() {
                         ? <span className={'pon-skore ' + (o.bucket || '')}>{o.score}</span>
                         : <span className="pon-nic">—</span>}
                     </td>
+
+                    {/* Záujem sa mení priamo v riadku — pri prechádzaní
+                        desiatok ponúk je otváranie detailu zdržanie. */}
+                    <td>
+                      <VyberZaujmu
+                        hodnota={o.moj_stav}
+                        stavy={c.stavy_zaujmu}
+                        zmenit={kod => zmenitZaujem(o.id, kod)}
+                      />
+                    </td>
                   </tr>
                   {det && (
                     <tr className="pon-detail-riadok">
@@ -467,6 +516,33 @@ function Detail({ data, zavri }) {
         Otvoriť originál na {o.source_name} →
       </a>
     </div>
+  );
+}
+
+// ------------------------------------------------------------
+// Výber záujmu o ponuku.
+//
+// Hodnoty prichádzajú z číselníka zo servera — pridanie stavu tak nevyžaduje
+// zmenu obrazovky. Východzí stav sa neukladá, preto je jeho kód prázdny.
+// ------------------------------------------------------------
+function VyberZaujmu({ hodnota, stavy, zmenit }) {
+  if (!stavy?.length) return <span className="pon-nic">—</span>;
+
+  const vychodzi = stavy.find(s => s.je_vychodzi);
+  const teraz = stavy.find(s => s.kod === hodnota) || vychodzi;
+
+  return (
+    <select
+      className={'pon-zaujem ' + (teraz?.farba || 'muted')}
+      value={hodnota || ''}
+      title={teraz?.popis || ''}
+      onClick={e => e.stopPropagation()}
+      onChange={e => zmenit(e.target.value)}
+    >
+      {stavy.map(s => (
+        <option key={s.kod} value={s.je_vychodzi ? '' : s.kod}>{s.nazov}</option>
+      ))}
+    </select>
   );
 }
 

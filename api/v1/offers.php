@@ -8,9 +8,53 @@
 $auth    = require_auth();
 $jeAdmin = ($auth['role'] ?? '') === 'admin';
 
-if ($method !== 'GET') json_error('Method not allowed', 405);
-
 $pdo = db();
+
+// ------------------------------------------------------------
+// POST /v1/offers?id=123 — vlastny stav ponuky
+//
+// Stav je na dvojici pouzivatel+ponuka: zamietnutie je osobne rozhodnutie
+// a ta ista ponuka moze inemu cloveku sediet.
+// ------------------------------------------------------------
+if ($method === 'POST') {
+    $offerId = (int)($_GET['id'] ?? 0);
+    if (!$offerId) json_error('Chýba id ponuky', 400);
+
+    $telo = json_decode(file_get_contents('php://input'), true) ?: [];
+    $stav = (string)($telo['stav'] ?? '');
+
+    // Prazdny stav = zrusenie priznaku, aby sa dalo vratit spat.
+    if ($stav === '') {
+        $st = $pdo->prepare(
+            'DELETE FROM job.user_offer_status WHERE user_id = ? AND offer_id = ?');
+        $st->execute([(int)$auth['user_id'], $offerId]);
+        // Zrusenie priznaku = navrat do vychodzieho stavu 'nevyhodnoteny'.
+        json_ok(['stav' => null, 'sprava' => 'Späť na nevyhodnotený']);
+    }
+
+    // Platnost sa overuje proti CISELNIKU, nie proti zoznamu v kode —
+    // pridanie stavu tak nevyzaduje zmenu tohto suboru.
+    $st = $pdo->prepare(
+        'SELECT nazov FROM job.stavy_zaujmu
+          WHERE kod = ? AND is_active AND NOT je_vychodzi');
+    $st->execute([$stav]);
+    $nazov = $st->fetchColumn();
+    if (!$nazov) json_error('Neznámy stav záujmu: ' . $stav, 400);
+
+    $st = $pdo->prepare(
+        "INSERT INTO job.user_offer_status (user_id, offer_id, status, note, updated_at)
+         VALUES (?, ?, ?, ?, NOW())
+         ON CONFLICT (user_id, offer_id) DO UPDATE SET
+            status = EXCLUDED.status,
+            note = COALESCE(EXCLUDED.note, job.user_offer_status.note),
+            updated_at = NOW()");
+    $st->execute([(int)$auth['user_id'], $offerId, $stav,
+                  mb_substr(trim((string)($telo['poznamka'] ?? '')), 0, 1000) ?: null]);
+
+    json_ok(['stav' => $stav, 'sprava' => 'Označené: ' . $nazov]);
+}
+
+if ($method !== 'GET') json_error('Method not allowed', 405);
 
 // ------------------------------------------------------------
 // Detail jedneho inzeratu
@@ -124,12 +168,43 @@ $args = [];
 // Standardne len otvorene — na uzavretu poziciu sa neda prihlasit. Da sa
 // vsak prepnut: na kontraktorskych portaloch tvoria uzavrete vacsinu
 // zoznamu (ariva.sk 173 z 239) a hovoria, o ake role tam byva zaujem.
+// Zaujem pouzivatela. Standardne sa skryvaju ponuky oznacene ako
+// "nezaujem" — to je zmysel priznaku. Ostatne volby: 'vsetky' (aj
+// zamietnute, aby sa dali vratit spat), 'zaujem', 'nezaujem',
+// 'nevyhodnotene'.
+$mojStav = $_GET['moj_stav'] ?? 'bez_nezaujmu';
+
 $stav = $_GET['stav'] ?? 'otvorene';
 $kde  = match ($stav) {
     'uzavrete' => ['NOT o.is_active'],
     'vsetky'   => [],
     default    => ['o.is_active'],
 };
+
+// Poddotaz, nie JOIN: ponuka bez zaznamu o stave je "nevyhodnotena"
+// a musi zostat vo vypise — JOIN by ju zahodil.
+$maStav = 'EXISTS (SELECT 1 FROM job.user_offer_status us
+                    WHERE us.offer_id = o.id AND us.user_id = ?
+                      AND us.status = ?)';
+$bezStavu = 'NOT EXISTS (SELECT 1 FROM job.user_offer_status us
+                          WHERE us.offer_id = o.id AND us.user_id = ?)';
+
+if ($mojStav === 'zaujem' || $mojStav === 'nezaujem') {
+    $kde[] = $maStav;
+    $args[] = (int)$auth['user_id'];
+    $args[] = $mojStav;
+} elseif ($mojStav === 'nevyhodnotene') {
+    $kde[] = $bezStavu;
+    $args[] = (int)$auth['user_id'];
+} elseif ($mojStav !== 'vsetky') {
+    // Predvolene sa skryvaju stavy, ktore to maju v ciselniku zapnute —
+    // ktory stav skryva ponuku, sa tym da zmenit bez zasahu do kodu.
+    $kde[] = 'NOT EXISTS (SELECT 1 FROM job.user_offer_status us
+                            JOIN job.stavy_zaujmu sz ON sz.kod = us.status
+                           WHERE us.offer_id = o.id AND us.user_id = ?
+                             AND sz.skryva)';
+    $args[] = (int)$auth['user_id'];
+}
 
 // Fulltext cez nazov, firmu, sumar a kluc. slova. Hlada sa aj v prelozenom
 // nazve — inzerat v cestine sa ma dat najst slovenskym slovom.
@@ -242,16 +317,20 @@ $sql = "SELECT o.id, o.external_id, o.url, o.title, o.title_sk, o.summary_sk,
                o.is_active, o.closed_reason,
                o.published_at, o.published_at_raw, o.created_at, o.last_seen_at,
                s.name AS source_name, s.code AS source_code,
-               m.score, m.bucket, m.summary AS match_summary, m.distance_km
+               m.score, m.bucket, m.summary AS match_summary, m.distance_km,
+               us.status AS moj_stav
           FROM job.offers o
           LEFT JOIN job.sources s ON s.id = o.source_id
           LEFT JOIN job.user_offer_match m ON m.offer_id = o.id AND m.user_id = ?
+          LEFT JOIN job.user_offer_status us ON us.offer_id = o.id AND us.user_id = ?
          WHERE $where
          ORDER BY $orderBy
          LIMIT $limit OFFSET $offset";
 
+// Dva parametre pred filtrami: vhodnost aj stav zaujmu sa pripajaju
+// LEFT JOINom na toho isteho pouzivatela.
 $st = $pdo->prepare($sql);
-$st->execute(array_merge([$auth['user_id']], $args));
+$st->execute(array_merge([$auth['user_id'], $auth['user_id']], $args));
 $offers = $st->fetchAll();
 
 foreach ($offers as &$o) {
@@ -299,6 +378,12 @@ $ciselniky = [
         "SELECT employment_type, COUNT(*) AS pocet FROM job.offers
           WHERE $stavKde AND employment_type IS NOT NULL
           GROUP BY employment_type ORDER BY COUNT(*) DESC")->fetchAll(),
+    // Ciselnik stavov zaujmu — obrazovka z neho poskladá stĺpec Záujem
+    // aj filter, takze hodnoty nema zadratovane u seba.
+    'stavy_zaujmu' => $pdo->query(
+        'SELECT kod, nazov, popis, farba, je_vychodzi, skryva
+           FROM job.stavy_zaujmu WHERE is_active ORDER BY poradie')->fetchAll(),
+
     // Kolko je ktoreho stavu — aby prepinac mohol ukazat pocty.
     'stavy' => $pdo->query(
         'SELECT COUNT(*) FILTER (WHERE is_active)     AS otvorene,
