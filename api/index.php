@@ -38,6 +38,8 @@ try {
         // naklady na model: zber vs. vyhodnocovanie vhodnosti
         $path === 'v1/admin/naklady'   => require __DIR__ . '/v1/admin/naklady.php',
 
+        // ciselnik portalov: nazov, adresy zberu, aktivny loading
+        $path === 'v1/admin/portaly'   => require __DIR__ . '/v1/admin/portaly.php',
         // rucne spustenie zberu
         $path === 'v1/admin/zber'      => require __DIR__ . '/v1/admin/zber.php',
         // test modelov: tazenie udajov + vhodnost

@@ -1,0 +1,221 @@
+/* ============================================================
+   Číselník portálov — názov, adresy zberu, príznak zberu.
+   ============================================================ */
+
+.portaly { padding: 16px; }
+.portaly h1 {
+  margin: 0 0 16px;
+  font-size: 22px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.por-pocet { font-size: 14px; font-weight: 400; color: var(--muted); }
+
+.por-chyba, .por-sprava {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  margin: 0 0 14px;
+}
+.por-chyba  { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); }
+.por-sprava { background: color-mix(in srgb, var(--ok) 12%, transparent);  color: var(--ok); }
+
+.por-pridat {
+  min-height: var(--dotyk);
+  padding: 0 18px;
+  margin-bottom: 14px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* --- tabuľka --- */
+.por-obal { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.por-tabulka {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  min-width: 900px;
+}
+.por-tabulka th {
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--line);
+  background: var(--panel);
+  text-align: left;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.por-tabulka td {
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.por-tabulka th.cislo, .por-tabulka td.cislo { text-align: right; }
+
+/* Vypnutý portál zostáva v zozname, len stlmený — inak by sa naň zabudlo. */
+.por-tabulka tr.vypnuty { opacity: .55; }
+
+.por-kod {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.por-znacka {
+  display: inline-block;
+  margin-top: 4px;
+  margin-right: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  color: var(--warn);
+}
+.por-znacka.prihlasenie {
+  background: color-mix(in srgb, var(--bad) 14%, transparent);
+  color: var(--bad);
+}
+
+/* Adresy pod sebou: portál ich môže mať aj päť (kraje na profesia.sk). */
+.por-adresy { display: flex; flex-direction: column; gap: 2px; max-width: 380px; }
+.por-adresy a {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 13px;
+  word-break: break-all;
+}
+.por-adresy a:hover { text-decoration: underline; }
+
+.por-nic { color: var(--muted); }
+.por-podrobnost {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Vyplnenosť stĺpca: zelená = parser funguje, červená = treba doplniť. */
+.por-pokrytie {
+  display: inline-block;
+  min-width: 30px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+.por-pokrytie.dobre     { background: color-mix(in srgb, var(--ok) 16%, transparent);   color: var(--ok); }
+.por-pokrytie.ciastocne { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.por-pokrytie.chyba     { background: color-mix(in srgb, var(--bad) 14%, transparent);  color: var(--bad); }
+
+.por-prepinac {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.por-akcie { display: flex; gap: 6px; flex-wrap: wrap; }
+.por-akcie button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.por-akcie button:disabled { opacity: .45; cursor: default; }
+.por-zmazat { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent) !important; }
+/* Potvrdzovacie tlačidlo je plné — je to posledný krok pred zmazaním. */
+.por-zmazat-potvrd {
+  background: var(--bad) !important;
+  color: #fff !important;
+  border-color: var(--bad) !important;
+}
+
+/* --- formulár --- */
+.por-formular {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.por-formular h2 { margin: 0 0 14px; font-size: 17px; }
+
+.por-polia {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.por-formular label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.por-formular label > span { font-weight: 600; color: var(--fg); }
+.por-formular em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.por-formular input[type="text"],
+.por-formular input[type="number"],
+.por-formular input:not([type]),
+.por-formular textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+.por-formular input { min-height: var(--dotyk); }
+.por-formular textarea {
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.por-adresy-pole, .por-popis-pole { margin-bottom: 12px; }
+.por-popis-pole textarea { font-family: inherit; font-size: 14px; }
+
+.por-prepinace { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 14px; }
+
+.por-tlacidla { display: flex; gap: 8px; flex-wrap: wrap; }
+.por-tlacidla button {
+  min-height: var(--dotyk);
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.por-ulozit {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+  font-weight: 600;
+}
+.por-tlacidla button:disabled { opacity: .45; cursor: default; }
+
+@media (min-width: 760px) {
+  .portaly { padding: 24px; }
+}
