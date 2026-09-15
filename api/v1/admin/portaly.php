@@ -31,6 +31,15 @@ function portaly_je_true($v): bool {
     return $v === true || $v === 't' || $v === 1 || $v === '1';
 }
 
+// Boolean do PostgreSQL.
+//
+// PDO viaze PHP false ako PRAZDNY RETAZEC a PostgreSQL ho pre typ boolean
+// odmietne ("invalid input syntax for type boolean"). Uklada sa preto
+// vyslovne 't'/'f' — inak ulozenie s odskrtnutym polickom zlyha.
+function portaly_bool(bool $v): string {
+    return $v ? 't' : 'f';
+}
+
 // Pole adries do tvaru, ktory prijme PostgreSQL.
 function portaly_pole_sql(array $adresy): string {
     if (!$adresy) return '{}';
@@ -132,8 +141,8 @@ if ($akcia === 'ulozit') {
         mb_substr($nazov, 0, 100),
         $adresy[0],
         portaly_pole_sql(array_slice($adresy, 1)),
-        !empty($vstup['is_active']),
-        !empty($vstup['je_agentura']),
+        portaly_bool(!empty($vstup['is_active'])),
+        portaly_bool(!empty($vstup['je_agentura'])),
         max(0, min(500, (int)($vstup['ponuk_na_stranu'] ?? 0))) ?: null,
         max(200, min(10000, (int)($vstup['request_delay_ms'] ?? 1500))),
         mb_substr(trim((string)($vstup['popis'] ?? '')), 0, 2000) ?: null,
@@ -179,8 +188,8 @@ if ($akcia === 'pridat') {
     $st->execute([
         $kod, mb_substr($nazov, 0, 100), $base, $adresy[0],
         portaly_pole_sql(array_slice($adresy, 1)),
-        !empty($vstup['is_active']),
-        !empty($vstup['je_agentura']),
+        portaly_bool(!empty($vstup['is_active'])),
+        portaly_bool(!empty($vstup['je_agentura'])),
         max(0, min(500, (int)($vstup['ponuk_na_stranu'] ?? 0))) ?: null,
         max(200, min(10000, (int)($vstup['request_delay_ms'] ?? 1500))),
         mb_substr(trim((string)($vstup['popis'] ?? '')), 0, 2000) ?: null,

@@ -51,7 +51,18 @@ try {
     };
 } catch (PDOException $e) {
     error_log('DB: ' . $e->getMessage());
-    json_error('Chyba databázy', 500);
+
+    // Samotne "Chyba databazy" nepovie, co sa stalo — pri ukladani formulara
+    // to znamena hladat v logu servera namiesto opravy na obrazovke. Posiela
+    // sa preto aj hlaska z databazy, bez SQL dotazu a nazvov stlpcov.
+    $dovod = $e->getMessage();
+    if (preg_match('/(invalid input syntax[^:]*: "[^"]*"|violates [a-z- ]+constraint'
+                 . '|value too long[^:]*|out of range[^:]*)/i', $dovod, $m)) {
+        $dovod = $m[1];
+    } elseif (str_contains($dovod, ']')) {
+        $dovod = trim(substr($dovod, strrpos($dovod, ']') + 1));
+    }
+    json_error('Chyba databázy: ' . mb_substr($dovod, 0, 200), 500);
 } catch (Throwable $e) {
     error_log('ERR: ' . $e->getMessage());
     json_error('Chyba servera: ' . $e->getMessage(), 500);

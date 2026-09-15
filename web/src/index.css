@@ -445,3 +445,30 @@ img { max-width: 100%; height: auto; }
 @media (min-width: 700px) {
   .pref-doplnky input { max-width: 220px; }
 }
+
+/* ============================================================
+   ZAŠKRTÁVACIE POLIČKO — vždy VEDĽA textu, na jednom riadku.
+
+   Formuláre majú bežne pravidlo "label { flex-direction: column }", aby
+   popis stál nad vstupným poľom. Pri zaškrtávacom políčku to ale znamená
+   políčko nad textom a zbytočne dva riadky. Toto pravidlo to prebíja
+   všade naraz, takže sa to nemusí riešiť na každej obrazovke zvlášť.
+   ============================================================ */
+label:has(> input[type="checkbox"]),
+label:has(> input[type="radio"]) {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+/* Políčko si drží svoju veľkosť — v pružnom riadku by sa inak zmrštilo. */
+label > input[type="checkbox"],
+label > input[type="radio"] {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+}

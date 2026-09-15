@@ -201,7 +201,8 @@
 .por-adresy-pole, .por-popis-pole { margin-bottom: 12px; }
 .por-popis-pole textarea { font-family: inherit; font-size: 14px; }
 
-.por-prepinace { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 14px; }
+/* Dva prepinace vedla seba — kazdy je jeden riadok, nie dva. */
+.por-prepinace { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 14px; }
 
 .por-tlacidla { display: flex; gap: 8px; flex-wrap: wrap; }
 .por-tlacidla button {
