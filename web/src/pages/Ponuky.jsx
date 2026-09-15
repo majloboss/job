@@ -37,6 +37,13 @@ const REZIMY = { onsite: 'Na pracovisku', hybrid: 'Hybridne', remote: 'Z domu' }
 // Krátke označenie do tabuľky — plný názov by rozťahoval stĺpec.
 const REZIMY_KRATKO = { onsite: 'pracovisko', hybrid: 'hybrid', remote: 'z domu' };
 
+// Jazyk originálu sa ukazuje v nadpise sekcie — kód "de" sám o sebe
+// čitateľovi nič nepovie.
+const JAZYKY = {
+  sk: 'slovenčina', cs: 'čeština', en: 'angličtina', de: 'nemčina',
+  hu: 'maďarčina', pl: 'poľština', uk: 'ukrajinčina', ru: 'ruština',
+};
+
 // Ako model ponuku zaradil. Hranice su v prompte: 0-25, 26-59, 60-100.
 const BUCKETY = {
   vhodne: 'Vhodná ponuka',
@@ -426,14 +433,11 @@ export default function Ponuky() {
 // prepnut medzi prekladom a originalom.
 // ------------------------------------------------------------
 function Detail({ data, zavri }) {
-  const [jazyk, setJazyk] = useState('preklad');
-
   if (data.nacitava) return <div className="pon-detail">Načítavam…</div>;
   if (data.chyba)    return <div className="pon-detail pon-chyba">{data.chyba}</div>;
 
   const o = data.offer;
   const maPreklad = !!data.obsah?.preklad;
-  const obsah = (jazyk === 'preklad' && maPreklad) ? data.obsah.preklad : data.obsah?.original;
 
   return (
     <div className="pon-detail">
@@ -442,32 +446,30 @@ function Detail({ data, zavri }) {
         <button className="pon-zavri" onClick={zavri} aria-label="Zavrieť">×</button>
       </div>
 
-      <p className="pon-meta">
-        {o.company_name_raw}
-        {o.is_agency_offer && <span className="pon-agentura">agentúra</span>}
-        {' · '}{o.source_name}
-        {' · '}{datum(o.published_at || o.created_at)}
-      </p>
-
+      {/* Všetky vyťažené údaje v JEDNEJ sekcii.
+          Predtým boli rozhádzané: časť ako polia nad textom a tie isté
+          hodnoty znova v tele inzerátu, kde ich portál napísal do zoznamu.
+          Teraz je zdroj jeden a telo inzerátu začína až popisom práce. */}
       <dl className="pon-udaje">
-        {mzda(o) !== '—' && <><dt>Mzda</dt><dd>{o.salary_raw || mzda(o)}</dd></>}
-        {o.employment_type && <><dt>Úväzok</dt><dd>{UVAZKY[o.employment_type] || o.employment_type}</dd></>}
-        {o.remote_type && <><dt>Režim</dt><dd>{REZIMY[o.remote_type] || o.remote_type}</dd></>}
-        {o.seniority && <><dt>Úroveň</dt><dd>{o.seniority}</dd></>}
-        {o.industry && <><dt>Odvetvie</dt><dd>{o.industry}</dd></>}
-        {o.locations?.length > 0 && (
-          <><dt>Miesto</dt><dd>{o.locations.map(l => l.name).join(', ')}</dd></>
-        )}
-        {o.education_level && <><dt>Vzdelanie</dt><dd>{o.education_level}</dd></>}
-        {o.start_date && <><dt>Nástup</dt><dd>{o.start_date}</dd></>}
+        <Udaj popis="Názov pozície" hodnota={o.title_sk || o.title} />
+        <Udaj popis={o.is_agency_offer ? 'Agentúra' : 'Firma'}
+              hodnota={o.company_name_raw || (o.is_agency_offer ? o.source_name : null)} />
+        <Udaj popis="Zverejnené"
+              hodnota={datumPlny(o.published_at || o.created_at)} />
+        <Udaj popis="Miesto"
+              hodnota={(o.locations_raw || []).join(', ')
+                       || (o.locations || []).map(l => l.name).join(', ')} />
+        <Udaj popis="Pracovný pomer"
+              hodnota={(o.employment_types || []).map(u => UVAZKY[u] || u).join(', ')
+                       || UVAZKY[o.employment_type] || o.employment_type} />
+        <Udaj popis="Režim" hodnota={REZIMY[o.remote_type] || o.remote_type} />
+        <Udaj popis="Dátum nástupu" hodnota={o.start_date} />
+        <Udaj popis="Trvanie projektu" hodnota={o.contract_duration} />
+        <Udaj popis="Odmena" hodnota={o.salary_raw || (mzda(o) !== '—' ? mzda(o) : null)} />
+        <Udaj popis="Odvetvie" hodnota={o.industry} />
+        <Udaj popis="Úroveň" hodnota={o.seniority} />
+        <Udaj popis="Vzdelanie" hodnota={o.education_level} />
       </dl>
-
-      {o.summary_sk && <p className="pon-sumar-detail">{o.summary_sk}</p>}
-
-      {/* Posudok vhodnosti — druhý krok aplikácie. Je hore, hneď pod
-          údajmi: pri prechádzaní ponúk je to prvé, čo človek chce vedieť,
-          a až potom číta samotný inzerát. */}
-      {data.posudok && <Posudok p={data.posudok} />}
 
       {o.technologies?.length > 0 && (
         <p className="pon-tagy">
@@ -475,22 +477,39 @@ function Detail({ data, zavri }) {
         </p>
       )}
 
-      {maPreklad && (
-        <div className="pon-jazyky">
-          <button className={jazyk === 'preklad' ? 'aktivny' : ''}
-                  onClick={() => setJazyk('preklad')}>Slovensky</button>
-          <button className={jazyk === 'original' ? 'aktivny' : ''}
-                  onClick={() => setJazyk('original')}>
-            Originál ({data.obsah.original?.lang || o.orig_lang})
-          </button>
-        </div>
+      {/* Posudok vhodnosti — druhý krok aplikácie. */}
+      {data.posudok && <Posudok p={data.posudok} />}
+
+      {/* Sumarizácia od modelu. Vzniká pri parsovaní (krok 1); kým nebeží,
+          sekcia sa nezobrazuje vôbec — prázdny nadpis nič nehovorí. */}
+      {o.summary_sk && (
+        <section className="pon-sekcia">
+          <h3>Sumarizácia inzerátu</h3>
+          <p className="pon-sumar-detail">{o.summary_sk}</p>
+        </section>
       )}
 
-      {/* HTML je ocistene uz na serveri (offers_ocisti_html) — zostavaju
-          len znacky pre strukturu, ziadne skripty ani atributy. */}
-      {obsah?.html
-        ? <div className="pon-html" dangerouslySetInnerHTML={{ __html: obsah.html }} />
-        : obsah?.text && <pre className="pon-text">{obsah.text}</pre>}
+      {/* Telo inzerátu. Keď existuje preklad, je prvý a originál pod ním —
+          pôvodné znenie sa nikdy neprepisuje, aby sa dalo overiť. */}
+      {maPreklad && (
+        <section className="pon-sekcia">
+          <h3>Inzerát (slovenský jazyk)</h3>
+          <TeloInzeratu obsah={data.obsah.preklad} />
+        </section>
+      )}
+
+      {data.obsah?.original && (
+        <section className="pon-sekcia">
+          <h3>
+            {maPreklad
+              ? `Inzerát (originál${data.obsah.original.lang
+                   ? ', ' + (JAZYKY[data.obsah.original.lang] || data.obsah.original.lang)
+                   : ''})`
+              : 'Inzerát'}
+          </h3>
+          <TeloInzeratu obsah={data.obsah.original} />
+        </section>
+      )}
 
       {/* Adminovi navyse: cim a za kolko sa inzerat vytazil. */}
       {o.zber?.length > 0 && (
@@ -517,6 +536,22 @@ function Detail({ data, zavri }) {
       </a>
     </div>
   );
+}
+
+// Jeden riadok v prehľade údajov. Prázdne pole sa vynechá — riadok
+// s pomlčkou len predlžuje zoznam a nič nehovorí.
+function Udaj({ popis, hodnota }) {
+  if (hodnota === null || hodnota === undefined || hodnota === '') return null;
+  return <><dt>{popis}</dt><dd>{hodnota}</dd></>;
+}
+
+// Telo inzerátu: HTML očistené na servery, inak holý text.
+function TeloInzeratu({ obsah }) {
+  if (obsah?.html) {
+    return <div className="pon-html" dangerouslySetInnerHTML={{ __html: obsah.html }} />;
+  }
+  if (obsah?.text) return <pre className="pon-text">{obsah.text}</pre>;
+  return <p className="pon-nic">Text inzerátu nie je uložený.</p>;
 }
 
 // ------------------------------------------------------------
@@ -605,6 +640,13 @@ function datum(iso) {
   if (rozdiel === 1) return 'včera';
   if (rozdiel < 7)   return `pred ${rozdiel} dňami`;
   return d.toLocaleDateString('sk-SK', { day: 'numeric', month: 'numeric', year: '2-digit' });
+}
+
+// V zozname stačí "dnes", v detaile má byť dátum presne.
+function datumPlny(iso) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleDateString('sk-SK',
+    { day: 'numeric', month: 'numeric', year: 'numeric' });
 }
 
 function sklonuj(n) {

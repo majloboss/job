@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { Fragment, useEffect, useState, useCallback } from 'react';
 import { api } from '../api';
 import './Portaly.css';
 
@@ -132,7 +132,9 @@ export default function Portaly() {
                                .filter(Boolean);
               const ponuk = Number(p.ponuk);
               return (
-                <tr key={p.id} className={p.is_active ? '' : 'vypnuty'}>
+                <Fragment key={p.id}>
+                <tr className={(p.is_active ? '' : 'vypnuty')
+                               + (upravovany === p.id ? ' upravovany' : '')}>
                   <td>
                     <strong>{p.name}</strong>
                     <span className="por-kod">{p.code}</span>
@@ -200,21 +202,28 @@ export default function Portaly() {
                     )}
                   </td>
                 </tr>
+
+                {/* Formulár sa rozbalí HNEĎ pod upravovaným portálom.
+                    Predtým bol pod celou tabuľkou, takže pri dlhšom zozname
+                    nebolo vidieť, že sa vôbec otvoril. */}
+                {upravovany === p.id && (
+                  <tr className="por-formular-riadok">
+                    <td colSpan={8}>
+                      <Formular
+                        data={formular} setData={setFormular}
+                        pracuje={pracuje}
+                        ulozit={() => akcia('ulozit', { ...formular, id: p.id })}
+                        zrusit={() => setUpravovany(null)}
+                      />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
           </tbody>
         </table>
       </div>
-
-      {/* Úprava je pod tabuľkou, aby zostalo vidieť, ktorý portál sa mení. */}
-      {upravovany && upravovany !== 'novy' && (
-        <Formular
-          data={formular} setData={setFormular}
-          pracuje={pracuje}
-          ulozit={() => akcia('ulozit', { ...formular, id: upravovany })}
-          zrusit={() => setUpravovany(null)}
-        />
-      )}
     </div>
   );
 }

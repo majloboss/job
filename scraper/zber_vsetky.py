@@ -484,8 +484,11 @@ def uloz_ponuku(cur, source_id, run_id, url, nazov, uzavrete=False):
 # ============================================================
 
 # ariva.sk: dvojica <li><b>Popis</b></li><li><span>hodnota</span></li>
+# Pred popisom byva ikona. Niekedy je to samostatna znacka (<img>),
+# inokedy prvok s vnorenymi <span> pre jednotlive casti ikony —
+# preto sa preskakuje VSETKO az po <b>, nielen jedna znacka.
 RE_ARIVA_POLE = re.compile(
-    r"<li[^>]*>(?:\s*<(?:img|i)\b[^>]*>)*\s*<b[^>]*>(.*?)</b>\s*</li>\s*"
+    r"<li[^>]*>(?:(?!</li>|<b[^>]*>).)*<b[^>]*>(.*?)</b>\s*</li>\s*"
     r"<li[^>]*>(.*?)</li>",
     re.I | re.S)
 
@@ -538,7 +541,10 @@ POLIA = {
     "homeoffice": ("home office", "homeoffice", "praca z domu", "práca z domu", "remote"),
     # titans.eu: "Full-time" / "Part-time" pod popiskou o forme spoluprace.
     "forma":    ("forma spoluprace", "forma spolupráce", "typ uvazku", "uvazok"),
-    "nastup":   ("datum nastupu", "dátum nástupu", "nastup", "nástup", "termin nastupu"),
+    "nastup":   ("datum nastupu", "dátum nástupu", "nastup", "nástup", "termin nastupu",
+                 "termin nastupu", "predpokladany termin nastupu", "start"),
+    "trvanie":  ("trvanie projektu", "trvanie", "dlzka projektu", "duration",
+                 "predpokladana dlzka"),
     "firma":    ("spolocnost", "spoločnosť", "firma", "zamestnavatel", "zamestnávateľ",
                  "klient"),
     # lugera.sk drzi odbor ako samostatny udaj vedla lokality.
@@ -805,6 +811,8 @@ def uloz_udaje(cur, offer_id, h, url=None):
             salary_period    = COALESCE(salary_period, %s),
             salary_currency  = COALESCE(salary_currency, %s),
             industry         = COALESCE(industry, %s),
+            start_date       = COALESCE(start_date, %s),
+            contract_duration = COALESCE(contract_duration, %s),
             updated_at       = NOW()
          WHERE id = %s
     """, (
@@ -819,6 +827,10 @@ def uloz_udaje(cur, offer_id, h, url=None):
         "EUR" if smin else None,
         # Odvetvie uvadza len cast portalov (lugera.sk); inde ho doplni model.
         (u.get("odvetvie") or None) and u["odvetvie"][:100],
+        # Nastup a trvanie su volny text ("dohodou", "dlhodobo") — necha sa
+        # tak, ako to portal napisal; datum sa z toho zvacsa ani neda urcit.
+        (u.get("nastup") or None) and u["nastup"][:100],
+        (u.get("trvanie") or None) and u["trvanie"][:100],
         offer_id,
     ))
     return True

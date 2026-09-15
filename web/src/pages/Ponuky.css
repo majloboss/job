@@ -266,12 +266,30 @@
 .pon-detail h2 { margin: 0 0 6px; font-size: 19px; }
 .pon-meta { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
 
+/* Prehľad vyťažených údajov. Na širokom displeji dva stĺpce dvojíc,
+   aby sa zoznam zbytočne nenaťahoval do výšky. */
 .pon-udaje {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 4px 14px;
-  margin: 0 0 14px;
+  margin: 0 0 16px;
   font-size: 14px;
+}
+@media (min-width: 900px) {
+  .pon-udaje { grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr); }
+}
+
+/* Časti detailu: sumarizácia, preklad, originál. */
+.pon-sekcia { margin: 0 0 18px; }
+.pon-sekcia h3 {
+  margin: 0 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .03em;
 }
 .pon-udaje dt { color: var(--muted); }
 .pon-udaje dd { margin: 0; }

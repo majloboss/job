@@ -144,6 +144,12 @@
   border-color: var(--bad) !important;
 }
 
+/* Upravovany portal je zvyrazneny, aby bolo jasne, ku ktoremu formular patri. */
+.por-tabulka tr.upravovany { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.por-formular-riadok > td { padding: 0 !important; background: var(--panel); }
+/* Vo vnorenom riadku uz ram netreba — oddeluje ho samotny riadok tabulky. */
+.por-formular-riadok .por-formular { margin: 0; border-radius: 0; border-left: 3px solid var(--accent); }
+
 /* --- formulár --- */
 .por-formular {
   margin-top: 18px;
